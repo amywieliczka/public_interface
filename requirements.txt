@@ -1,0 +1,13 @@
+Django==1.7
+PyYAML==3.11
+anyjson==0.3.3
+basin==0.1
+boto==2.32.1
+coverage==3.7.1
+coveralls==0.4.2
+docopt==0.6.2
+https://github.com/tingletech/md5s3stash/archive/master.zip
+requests==2.4.1
+simplejson==3.6.3
+solrpy==0.9.6
+wsgiref==0.1.2
