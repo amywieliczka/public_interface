@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.http import HttpResponse
 from django import forms
+from django.conf import settings
 
 import md5s3stash
 import operator
@@ -15,14 +16,7 @@ SOLR = solr.Solr('http://107.21.228.130:8080/solr/dc-collection')
 
 
 def md5_to_http_url(md5):
-    try: 
-        s3_url = md5s3stash.md5_to_s3_url(md5, 'ucldc')
-        http_url = re.sub(r's3://([a-zA-z0-9\/\.]+)', 
-                          r'https://s3.amazonaws.com/\1',
-                          s3_url)
-        return http_url
-    except ValueError:
-        return
+    return md5s3stash.md5_to_http_url(md5, 'ucldc')
 
 def process_media(item):
     if 'reference_image_md5' in item:

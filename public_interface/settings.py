@@ -8,9 +8,14 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/1.6/ref/settings/
 """
 
+import django.conf.global_settings as DEFAULT_SETTINGS  # http://stackoverflow.com/a/15446953/1763984
+
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
 import os
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
+THUMBNAIL_BASE = 'http://localhost:8888/'
 
 
 # Quick-start development settings - unsuitable for production
@@ -23,6 +28,10 @@ SECRET_KEY = '7vyi*u+i(omc*t_t7*i2*+x(b+@*ue#_fxs5s-8%ot@n@p8)6c'
 DEBUG = True
 
 TEMPLATE_DEBUG = True
+
+TEMPLATE_CONTEXT_PROCESSORS = DEFAULT_SETTINGS.TEMPLATE_CONTEXT_PROCESSORS  + (
+    'public_interface.context_processors.settings',
+)
 
 ALLOWED_HOSTS = []
 
