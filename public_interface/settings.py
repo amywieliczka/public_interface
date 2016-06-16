@@ -28,6 +28,7 @@ SECRET_KEY = os.getenv('DJANGO_SECRET_KEY',
                        )
              )
 
+DJANGO_CACHE_TIMEOUT = os.getenv('DJANGO_CACHE_TIMEOUT', 60*15) # seconds
 
 SOLR_URL = os.getenv('UCLDC_SOLR_URL', 'http://localhost:8983/solr')
 SOLR_API_KEY = os.getenv('UCLDC_SOLR_API_KEY', '')
@@ -69,6 +70,8 @@ ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 SITE_ID = 1
 
+DEBUG_TOOLBAR_PATCH_SETTINGS = False
+
 # Application definition
 
 INSTALLED_APPS = (
@@ -83,14 +86,16 @@ INSTALLED_APPS = (
     'django.contrib.humanize',
     'easy_pjax',
     'calisphere',
+    'debug_toolbar',
 )
 
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',  # are we using sessions?
     'django.middleware.gzip.GZipMiddleware',
-    'django.middleware.cache.UpdateCacheMiddleware',
+    'debug_toolbar.middleware.DebugToolbarMiddleware',
+    # 'django.middleware.cache.UpdateCacheMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.cache.FetchFromCacheMiddleware',
+    # 'django.middleware.cache.FetchFromCacheMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.auth.middleware.SessionAuthenticationMiddleware',
@@ -98,6 +103,28 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'easy_pjax.middleware.UnpjaxMiddleware',
 )
+
+def show_toolbar(request):
+    return True
+
+DEBUG_TOOLBAR_CONFIG = {
+    "SHOW_TOOLBAR_CALLBACK": show_toolbar,
+}
+
+DEBUG_TOOLBAR_PANELS = [
+    'debug_toolbar.panels.versions.VersionsPanel',
+    'debug_toolbar.panels.timer.TimerPanel',
+    'debug_toolbar.panels.settings.SettingsPanel',
+    'debug_toolbar.panels.headers.HeadersPanel',
+    'debug_toolbar.panels.request.RequestPanel',
+    'debug_toolbar.panels.sql.SQLPanel',
+    'debug_toolbar.panels.staticfiles.StaticFilesPanel',
+    'debug_toolbar.panels.templates.TemplatesPanel',
+    'debug_toolbar.panels.cache.CachePanel',
+    'debug_toolbar.panels.signals.SignalsPanel',
+    'debug_toolbar.panels.logging.LoggingPanel',
+    'debug_toolbar.panels.redirects.RedirectsPanel',
+]
 
 ROOT_URLCONF = 'public_interface.urls'
 
@@ -109,8 +136,9 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [],
-        # "APP_DIRS": True,
+        "APP_DIRS": True,
         "OPTIONS": {
+            "debug": UCLDC_DEVEL,
             "builtins": [
                 "easy_pjax.templatetags.pjax_tags"
             ],
@@ -119,14 +147,14 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 'public_interface.context_processors.settings',
-            ],
-            "debug": UCLDC_DEVEL,
-            'loaders': [
-                ('django.template.loaders.cached.Loader', [
-                    'django.template.loaders.filesystem.Loader',
-                    'django.template.loaders.app_directories.Loader',
-                ]),
-        ],
+            ]
+            # ,
+        #     'loaders': [
+        #         ('django.template.loaders.cached.Loader', [
+        #             'django.template.loaders.filesystem.Loader',
+        #             'django.template.loaders.app_directories.Loader',
+        #         ]),
+        # ],
         }
     }
 ]
@@ -223,7 +251,9 @@ MEDIA_URL = '/media/'
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.6/howto/static-files/
 
-STATIC_URL = os.getenv('UCLDC_STATIC_URL', 'http://localhost:9000/')  # `grunt serve`
+# STATIC_URL = os.getenv('UCLDC_STATIC_URL', 'http://localhost:9000/')  # `grunt serve`
+
+STATIC_URL = '/static/'
 
 STATIC_ROOT = os.path.join(BASE_DIR, "static_root")
 

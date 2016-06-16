@@ -1,4 +1,4 @@
-from django.conf.urls import include, url
+from django.conf.urls import include, patterns, url
 from django.contrib import admin
 from django.http import HttpResponse
 from django.views.generic import TemplateView
@@ -27,4 +27,10 @@ urlpatterns = [
     url(r'^robots.txt$',
         lambda r: HttpResponse("User-agent: *\nDisallow: /", content_type="text/plain")
     )
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+] + static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+
+if settings.DEBUG:
+    import debug_toolbar
+    urlpatterns += patterns('', 
+        url(r'^__debug__', include(debug_toolbar.urls)),
+    )
