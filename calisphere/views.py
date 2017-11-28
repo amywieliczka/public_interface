@@ -165,7 +165,7 @@ def getCollectionMosaic(collection_url):
     # get 6 image items from the collection for the mosaic preview
     search_terms = {
         'q': '*:*',
-        'fields': 'reference_image_md5, url_item, id, title, collection_url, type_ss',
+        'fl': 'reference_image_md5, url_item, id, title, collection_url, type_ss',
         'sort': 'sort_title asc',
         'rows': 6,
         'start': 0,
@@ -653,7 +653,7 @@ def itemViewCarousel(request):
         # numFound = json.loads(carousel_solr_search)['moreLikeThis'][item_id]['numFound']
     else:
         solrParams.update({'facet': 'false',
-            'fields': 'id, type_ss, reference_image_md5, title'})
+            'fl': 'id, type_ss, reference_image_md5, title'})
         if solrParams.get('start') == 'NaN':
             solrParams['start'] = 0
         try:
@@ -751,9 +751,8 @@ def relatedCollections(request, slug=None, repository_id=None):
                 'q': solrParams['q'],
                 'rows': '3',
                 'fq': ["collection_url: \"" + collection['url'] + "\""],
-                'fields': 'collection_data, reference_image_md5, url_item, id, title, type_ss'
+                'fl': 'collection_data, reference_image_md5, url_item, id, title, type_ss'
             }
-
             collection_items = SOLR_select(**rc_solrParams)
             collection_items = collection_items.results
 
