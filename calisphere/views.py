@@ -11,8 +11,11 @@ from django.conf import settings
 from django.urls import reverse
 from django.http import Http404, JsonResponse, HttpResponse
 from calisphere.collection_data import CollectionManager
-from .constants import CAMPUS_LIST, DEFAULT_FACET_FILTER_TYPES, FACET_FILTER_TYPES, SORT_OPTIONS, FEATURED_UNITS, getCollectionData, getRepositoryData, collectionFilterDisplay, repositoryFilterDisplay, RIGHTS_STATEMENTS
+from .constants import CAMPUS_LIST, SORT_OPTIONS, FEATURED_UNITS, RIGHTS_STATEMENTS, registry_regex
 from .cache_retry import SOLR_select, SOLR_raw, json_loads_url
+from .facets import DEFAULT_FACET_FILTER_TYPES, FACET_FILTER_TYPES, collectionFilterDisplay, repositoryFilterDisplay
+from .collection import *
+from .repository import *
 from static_sitemaps.util import _lazy_load
 from static_sitemaps import conf
 from requests.exceptions import HTTPError
@@ -27,82 +30,6 @@ import copy
 import simplejson as json
 import string
 import urllib.parse
-
-def process_sort_collection_data(string):
-    '''temporary; should parse sort_collection_data
-       with either `:` or `::` dlimiter style
-    '''
-    if '::' in string:
-        return string.split('::', 2)
-    else:
-        part1, remainder = string.split(':', 1)
-        part2, part3 = remainder.rsplit(':https:')
-        return [part1, part2, 'https:{}'.format(part3)]
-
-
-def getMoreCollectionData(collection_data):
-    collection = getCollectionData(
-        collection_data=collection_data,
-        collection_id=None, )
-    collection_details = json_loads_url(
-        "{0}?format=json".format(collection['url']))
-    collection['local_id'] = collection_details['local_id']
-    collection['slug'] = collection_details['slug']
-    collection['harvest_type'] = collection_details['harvest_type']
-    collection['custom_facet'] = collection_details['custom_facet']
-
-    production_disqus = settings.UCLDC_FRONT == 'https://calisphere.org/' or settings.UCLDC_DISQUS == 'prod'
-    if production_disqus:
-        collection['disqus_shortname'] = collection_details.get('disqus_shortname_prod')
-    else:
-        collection['disqus_shortname'] = collection_details.get('disqus_shortname_test')
-
-    return collection
-
-
-
-def getCollectionMosaic(collection_url):
-    # get collection information from collection registry
-    collection_details = json_loads_url(collection_url + "?format=json")
-    collection_repositories = []
-    for repository in collection_details.get('repository'):
-        if 'campus' in repository and len(repository['campus']) > 0:
-            collection_repositories.append(repository['campus'][0]['name'] +
-                                           ", " + repository['name'])
-        else:
-            collection_repositories.append(repository['name'])
-
-    # get 6 image items from the collection for the mosaic preview
-    search_terms = {
-        'q': '*:*',
-        'fields': 'reference_image_md5, url_item, id, title, collection_url, type_ss',
-        'sort': 'sort_title asc',
-        'rows': 6,
-        'start': 0,
-        'fq': [
-            'collection_url: \"' + collection_url + '\"', 'type_ss: \"image\"'
-        ]
-    }
-    display_items = SOLR_select(**search_terms)
-    items = display_items.results
-
-    search_terms['fq'] = [
-        'collection_url: \"' + collection_url + '\"',
-        '(*:* AND -type_ss:\"image\")'
-    ]
-    ugly_display_items = SOLR_select(**search_terms)
-    # if there's not enough image items, get some non-image items for the mosaic preview
-    if len(items) < 6:
-        items = items + ugly_display_items.results
-
-    return {
-        'name': collection_details['name'],
-        'description': collection_details['description'],
-        'collection_id': collection_details['id'],
-        'institutions': collection_repositories,
-        'numFound': display_items.numFound + ugly_display_items.numFound,
-        'display_items': items
-    }
 
 def process_facets(facets, filters, facet_type=None):
     #remove facets with count of zero
@@ -122,20 +49,20 @@ def process_facets(facets, filters, facet_type=None):
     #append selected filters even if they have a count of 0
     for f in filters:
         if not any(f in facet[0] for facet in display_facets):
-            api_url = re.match(
-                r'^https://registry\.cdlib\.org/api/v1/(?P<collection_or_repo>collection|repository)/(?P<url>\d*)/?',
-                f)
-            if api_url is not None:
-                if api_url.group('collection_or_repo') == 'collection':
-                    collection = getCollectionData(
-                        collection_id=api_url.group('url'))
+            api_url = re.match(registry_regex, f)
+            if api_url:
+                if api_url.group('col_or_repo') == 'collection':
+                    collection = getFullCollection(f)
+
+                    display_facets.append(("{}::{}".format(
+                        collection.get('url'), collection.get('name')), 0))
+
+                elif api_url.group('col_or_repo') == 'repository':
+                    repository = getFullRepository(f)
+
                     display_facets.append(
-                        ("{}::{}".format(collection.get('url'), collection.get('name')), 0))
-                elif api_url.group('collection_or_repo') == 'repository':
-                    repository = getRepositoryData(
-                        repository_id=api_url.group('url'))
-                    display_facets.append(
-                        ("{}::{}".format(repository.get('url'), repository.get('name')), 0))
+                        ("{}::{}".format(repository.get('url'), 
+                            repository.get('name')), 0))
             else:
                 display_facets.append((f, 0))
 
@@ -242,6 +169,8 @@ def solrEncode(params, filter_types, facet_types = []):
 
 def getHostedContentFile(structmap):
     contentFile = ''
+    if 'format' not in structmap:
+        return None
     if structmap['format'] == 'image':
         structmap_url = '{}{}/info.json'.format(settings.UCLDC_IIIF,
                                                 structmap['id'])
@@ -393,11 +322,13 @@ def itemView(request, item_id=''):
         item['parsed_repository_data'] = []
         item['institution_contact'] = []
         for collection_data in item.get('collection_data'):
+            collection = parseCollectionData(collection_data)
             item['parsed_collection_data'].append(
-                getMoreCollectionData(collection_data))
+                getFullCollection(collection['url'], collection_data))
         for repository_data in item.get('repository_data'):
+            repository = parseRepositoryData(repository_data)
             item['parsed_repository_data'].append(
-                getRepositoryData(repository_data=repository_data))
+                getFullRepository(repository['url'], repository_data))
 
             institution_url = item['parsed_repository_data'][0]['url']
             institution_details = json_loads_url(institution_url +
@@ -867,7 +798,7 @@ def campusDirectory(request):
 
     repositories = []
     for repository_url in solr_repositories:
-        repository = getRepositoryData(repository_url=repository_url)
+        repository = getFullRepository(repository_url)
         if repository['campus']:
             repositories.append({
                 'name':
@@ -907,7 +838,7 @@ def statewideDirectory(request):
         'repository_url']
     repositories = []
     for repository_url in solr_repositories:
-        repository = getRepositoryData(repository_url=repository_url)
+        repository = getFullRepository(repository_url)
         if repository['campus'] == '':
             repositories.append({
                 'name':
