@@ -411,6 +411,7 @@ def itemView(request, item_id=''):
         if 'structMap' in structmap_data:
             order = request.GET.get('order', None)
             order = int(order) if order else None
+            item['complex_object'] = True
             item = complexObject(item, structmap_data, order)
         else:
             # simple object

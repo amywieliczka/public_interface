@@ -22,6 +22,49 @@
   {% endif %}
  / <strong>{{ item.title.0|truncatewords:12 }}</strong></h1>
 
+{% if item.complex_object %}
+<div class="modal fade" id="parentMetadata" tabindex="-1" role="dialog" aria-labelledby="parentModalTitle">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title" id="parentModalTitle">Summary Information.</h4>
+      </div>
+      <div class="modal-body">
+        {% include "calisphere/item-metadata.html" %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<h2>Summary Information</h2>
+<div id="complex_object_summary" style="border: 1px solid black; padding: 10px; height: 150px; overflow: scroll; margin-bottom: 15px">
+  {% if 'description' in item %}
+    {% for description in item.description %}{{ description }} <br> {% endfor %}
+  {% endif %}<br/>
+  <a href="javascript: void(0)" data-toggle="modal" data-target="#parentMetadata">See Complete Summary</a>
+</div>
+{% include "calisphere/itemButtons.html" %}
+{% endif %}
+
+{% if item.complex_object %}
+<div class="row">
+<div class="col-md-3">
+  <h3>Contents</h3>
+
+  {% for component in item.structMap %}
+    <a class="js-component-link" data-item_id="{{ forloop.counter0 }}" href="{% url 'calisphere:itemView' item.id %}">
+      {{ component.label }}
+    </a><br/>
+  {% endfor %}
+
+</div>
+<div class="col-md-9">
+{% endif %}
+
 <div id="js-objectViewport" data-item_id="{{item.id}}">
 {% if item.harvest_type == 'hosted' and 'structMap' in item %}
   {% include 'calisphere/objectViewer/complex-object.html' %}
@@ -38,7 +81,14 @@
 {% endif %}
 </div>
 
-{% include "calisphere/itemButtons.html" %}
+{% if item.complex_object %}
+</div>
+</div>
+{% endif %}
+
+{% if not item.complex_object %}
+  {% include "calisphere/itemButtons.html" %}
+{% endif %}
 
 <h3 class="meta-heading">
   {% if item.harvest_type == 'harvested' %}
