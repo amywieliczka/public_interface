@@ -41,28 +41,34 @@
 </div>
 
 <h2>Summary Information</h2>
-<div id="complex_object_summary" style="border: 1px solid black; padding: 10px; height: 150px; overflow: scroll; margin-bottom: 15px">
+<div id="complex_object_summary" class="collection-intro" style="overflow: scroll; padding: 10px; height: 150px;">
   {% if 'description' in item %}
     {% for description in item.description %}{{ description }} <br> {% endfor %}
   {% endif %}<br/>
   <a href="javascript: void(0)" data-toggle="modal" data-target="#parentMetadata">See Complete Summary</a>
 </div>
-{% include "calisphere/itemButtons.html" %}
+<div class="complex__buttons">
+  {% include "calisphere/itemButtons.html" %}
+</div>
 {% endif %}
 
 {% if item.complex_object %}
-<div class="row">
-<div class="col-md-3">
+<div class="complex__container">
+<div class="complex__contents-container">
   <h3>Contents</h3>
-
+  <div class="complex__contents">
   {% for component in item.structMap %}
+    <div class="complex__component
+      {% if component.selected %}complex__selected-component{% endif %}" >
     <a class="js-component-link" data-item_id="{{ forloop.counter0 }}" href="{% url 'calisphere:itemView' item.id %}">
       {{ component.label }}
-    </a><br/>
+    </a>
+    </div>
   {% endfor %}
+  </div>
 
 </div>
-<div class="col-md-9">
+<div class="complex__viewer">
 {% endif %}
 
 <div id="js-objectViewport" data-item_id="{{item.id}}">

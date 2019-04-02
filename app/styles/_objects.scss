@@ -1,5 +1,50 @@
 // ##### Objects ##### //
 
+.complex__container {
+  display: flex; 
+  flex-wrap: wrap;
+}
+
+.complex__contents-container {
+  flex: 1 1; 
+  min-width: 150px; 
+  display: flex; 
+  flex-direction: column;
+}
+
+.complex__contents {
+  min-height: 300px; 
+  flex: 1 1 0px; 
+  overflow: scroll;
+}
+
+.complex__component {
+  padding: 5px 10px;
+}
+
+.complex__selected-component {
+  background-color: darkgrey;
+}
+
+.complex__viewer {
+  flex: 4 1 75%; 
+  max-width: 75%;
+}
+
+.complex__viewer .obj__container-osd {
+  margin: 0;
+}
+
+.complex__viewer .carousel-complex {
+  margin: 0;
+}
+
+.complex__buttons .obj-buttons--complex {
+  margin: 0;
+  background: none;
+}
+
+
 .obj__container {
   border-bottom: 1px solid $design-primary-color;
 }
