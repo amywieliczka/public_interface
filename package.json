@@ -43,7 +43,7 @@
     "imagesloaded": "~3.1.8",
     "infinite-scroll": "^3.0.5",
     "isotope-layout": "~3.0.6",
-    "jquery": "~3.3.1",
+    "jquery": "~3.4.0",
     "jquery-pjax": "^2.0.1",
     "jquery.dotdotdot": "^1.7.4",
     "mediaelement": "~4.1.2",
