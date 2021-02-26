@@ -1,7 +1,13 @@
+.slick-prev { z-index: 10000; }
+.explore-clusters-carousel .slick-dots li button:before {
+  font-size: 30px;
+}
 .explore-clusters {
-  padding: $layout-container-margin-md 15px 0px 40px;
+  padding: $layout-container-margin-md 40px $layout-container-margin-md 40px;
   border-top: 1px solid $design-dark-gray-color;
+  border-bottom: 1px solid $design-dark-gray-color;
   margin: $layout-container-margin-md 0 $layout-container-margin-md 0;
+  height: 450px;
 }
 .cluster-listing {
   padding-right: 15px;
@@ -11,6 +17,10 @@
   padding: 15px 15px 15px 15px;
   border: 1px solid $design-dark-gray-color;
   margin: 1px 0 $layout-container-margin-md 0;  
+}
+
+.snapshot a:hover {
+  cursor: pointer;
 }
 
 .collection-cluster-form {

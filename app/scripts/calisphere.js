@@ -297,6 +297,13 @@ var on_ready_pjax_end_handler = function() {
     for (var i=0; i<clusters.clusters.length; i++) {
       cluster_search(clusters.collection_id, clusters.clusters[i]);
     }
+    $('.explore-clusters-carousel').slick({
+      autoplay: true,
+      autoplaySpeed: 6000,
+      dots: true,
+      infinite: true,
+      cssEase: 'ease',
+    });
   }
 
   if ($('#js-collectionFacetForm').length) {
