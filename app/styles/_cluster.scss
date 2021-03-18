@@ -3,11 +3,20 @@
   font-size: 30px;
 }
 .explore-clusters {
-  padding: $layout-container-margin-md 40px $layout-container-margin-md 40px;
-  border-top: 1px solid $design-dark-gray-color;
-  border-bottom: 1px solid $design-dark-gray-color;
-  margin: $layout-container-margin-md 0 $layout-container-margin-md 0;
-  height: 450px;
+  padding: 0 40px $layout-container-margin-md 40px;
+  // border-top: 1px solid $design-dark-gray-color;
+  // border-bottom: 1px solid $design-dark-gray-color;
+  // margin: $layout-container-margin-md 0 $layout-container-margin-md 0;
+  height: 600px;
+}
+.explore-clusters ol {
+  padding: 10px;
+  height: 400px;
+  margin-top: $layout-container-margin-md;
+  overflow: scroll;
+}
+.explore-clusters ol li {
+  list-style: none;
 }
 .cluster-listing {
   padding-right: 15px;

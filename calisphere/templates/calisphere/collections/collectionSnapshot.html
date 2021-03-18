@@ -7,7 +7,7 @@
             <!-- href="{% url 'calisphere:collectionFacet' collection_id cluster.facet_field.facet %}"  -->
             <a onClick="$('.explore-clusters-carousel').slick('slickGoTo', {{ forloop.counter0 }})">
               {% if facet and cluster.facet_field.facet == facet.facet %}<strong>{% endif %}
-              {{ cluster.unique|intcomma }} unique {{ cluster.facet_field.display|lower }}{% if cluster.facet_field.display != 'rights' %}{{ cluster.unique|pluralize }}{% endif %}{% if cluster.unique == 1 %}</a>:
+              {{ cluster.unique|intcomma }} {{ cluster.facet_field.display|lower }}{% if cluster.facet_field.display != 'rights' %}{{ cluster.unique|pluralize }}{% endif %}{% if cluster.unique == 1 %}</a>:
                 <!-- <a href="{{cluster.values.0.uri}}"> -->{{ cluster.values.0.label|truncatewords:20 }}<!-- </a> -->
               {% endif %}
               {% if facet and cluster.facet_field.facet == facet.facet %}</strong>{% endif %}

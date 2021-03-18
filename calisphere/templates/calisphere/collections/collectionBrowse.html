@@ -48,6 +48,22 @@
           </a>
           {% if forloop.counter < collection.repository|length %} and {% endif %}
         {% endfor %}
+        <br/><br/>
+        {% if collection.repository|length > 1 %}
+          {% for repository in collection.repository %}
+            <a class="btn btn-default button__back-to-institution" href="{% url 'calisphere:repositoryView' repository.resource_id 'collections' %}" data-pjax="js-pageContent">
+              <span class="fa fa-angle-left fa-lg fa-fw"></span>
+              Go to {{ repository.name }} Page
+            </a>
+          {% endfor %}
+          {% else %}
+          {% with collection.repository.0 as repository %}
+            <a class="btn btn-default button__back-to-institution" href="{% url 'calisphere:repositoryView' repository.resource_id 'collections' %}" data-pjax="js-pageContent">
+              <span class="fa fa-angle-left fa-lg fa-fw"></span>
+              Go to Institution Page
+            </a>
+          {% endwith %}
+        {% endif %}
       </h2>
     </div>
   </div>
@@ -77,7 +93,7 @@
 
 {% block sidebar %}
 <div class="row">
-  <div class="col-sm-6 col-md-12">
+<!--   <div class="col-sm-6 col-md-12">
     <div class="button__institution-tabs-container">
       <a class="button__institution-tab-collections--selected"
       href="{% url 'calisphere:collectionBrowse' collection_id %}" data-pjax="js-pageContent">
@@ -88,22 +104,9 @@
       </a>
     </div>
   </div>
-  <div class="col-sm-6 col-md-12">
-    {% if collection.repository|length > 1 %}
-    {% for repository in collection.repository %}
-      <a class="btn btn-default button__back-to-institution" href="{% url 'calisphere:repositoryView' repository.resource_id 'collections' %}" data-pjax="js-pageContent">
-        <span class="fa fa-angle-left fa-lg fa-fw"></span>
-        Go to {{ repository.name }} Page
-      </a>
-    {% endfor %}
-    {% else %}
-    {% with collection.repository.0 as repository %}
-      <a class="btn btn-default button__back-to-institution" href="{% url 'calisphere:repositoryView' repository.resource_id 'collections' %}" data-pjax="js-pageContent">
-        <span class="fa fa-angle-left fa-lg fa-fw"></span>
-        Go to Institution Page
-      </a>
-    {% endwith %}
-    {% endif %}
+ -->  
+ <div class="col-sm-6 col-md-12">
+
   </div>
   <div class="col-sm-6 col-md-12">
     {% include "calisphere/collections/collectionSnapshot.html" %}
@@ -114,100 +117,131 @@
 {% block filters %}{% endblock %}
 
 {% block mainContent %}
-  <h2 class="text__institution-heading2">Browse Collection</h2>
+  <div style="display:flex">
+    <div style="flex: 1 1 auto"><h2 class="text__institution-heading2">Browse Collection | <a href="{% url 'calisphere:collectionView' collection_id %}">View all items</h2></a></div>
+    <div style="flex: 1 1 auto;">
+      <div style="float: right">
+        <form class="global-search" role="search" id="js-collectionSearch" action="{% url 'calisphere:collectionView' collection_id %}" method="get">
+            <label class="sr-only" for="header__search-field">Search this collection</label>
+            <div class="input-group">
+              <input id="header__search-field" form="js-collectionSearch" name="q" value="" type="search" class="form-control global-search__field js-collectionSearch" placeholder="Search this collection">
+              <span class="input-group-btn">
+                <button class="btn btn-default global-search__button" type="submit" aria-label="search">
+                  <span class="fa fa-search"></span>
+                </button>
+              </span>
+            </div>
+          </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="collection-cluster-form">
+  <form id="js-collectionFacetForm" action="{{ form_action }}">
+    {% if view_format == 'grid' %}
+    <button id="grid" class="btn btn-link js-view_format-toggle">
+      <span class="fa fa-th-large"></span> Grid
+    </button>
+    <button id="list" class="btn btn-link thumblist-toggle__list js-view_format-toggle">
+      <span class="fa fa-th-list"></span> List
+    </button>
+    {% else %}
+    <button id="grid" class="btn btn-link thumblist-toggle__thumbnails js-view_format-toggle">
+      <span class="fa fa-th-large"></span> Grid
+    </button>
+    <button id="list" class="btn btn-link js-view_format-toggle">
+      <span class="fa fa-th-list"></span> List
+    </button>
+    {% endif %}
+    <input type="hidden" name="view_format" value="{{ view_format }}">
+
+    <select name="sort" id="js-sort-selector" class="collection-cluster-form__sort-selector">
+      <option {% if sort == "largestFirst" %}selected{% endif %} value="largestFirst">
+        Largest item count first
+      </option>
+      <option {% if sort == "smallestFirst" %}selected{% endif %} value="smallestFirst">
+        Smallest item count first
+      </option>
+      <option {% if sort == "az" %}selected{% endif %} value="az">
+        A-Z
+      </option>
+      <option {% if sort == "za" %}selected{% endif %} value="za">
+        Z-A
+      </option>
+    </select>
+
+    {% if view_format == 'grid' %}
+      Viewing {{ page_info.start }} - {% if page_info.end < unique %}{{ page_info.end }}{% else %}{{ unique }}{% endif %} of {{ unique|intcomma }}
+      {% if page_info.start > 1 %}
+        <a class="btn btn-link pag-dropdown__arrow-icon"
+          aria-label="previous set"
+          href="{{ request.path }}?view_format={{ view_format }}&sort={{ sort }}&page={{ page_info.page|subtract:1 }}" data-pjax="js-pageContent">
+            <span class="fa fa-caret-left fa-lg">
+        </a>
+      {% else %}
+        <button class="btn btn-link pag-dropdown__arrow-icon"
+          type="button" aria-label="previous set" disabled>
+            <span class="fa fa-caret-left fa-lg"></span>
+        </button>
+      {% endif %}
+      {% if page_info.end < unique %}
+        <a class="btn btn-link pag-dropdown__arrow-icon"
+          aria-label="next set"
+          href="{{ request.path }}?view_format={{ view_format }}&sort={{ sort }}&page={{ page_info.page|add:1 }}" data-pjax="js-pageContent">
+            <span class="fa fa-caret-right fa-lg">
+        </a>
+      {% else %}
+        <button class="btn btn-link pag-dropdown__arrow-icon"
+          type="button" aria-label="next set" disabled>
+            <span class="fa fa-caret-right fa-lg"></span>
+        </button>
+      {% endif %}
+
+
+    {% endif %}
+  </form>
+</div>
+
 
   <div class="explore-clusters-carousel">
     {% for cluster in clusters %}
     <div class="row explore-clusters">
-      <div class="col-md-5 cluster-listing">
-        <h3>Browse {{ cluster.facet_field.display|title }}{% if cluster.facet_field.display != 'rights' %}s{% endif %} in this Collection</h3>
-        {% if cluster.unique >= 5 %}
-        <h4>Five Sample {{ cluster.facet_field.display|title }}{% if cluster.facet_field.display != 'rights' %}s{% endif %}</h4>
-        {% else %}
-        <h4>{{ cluster.unique|apnumber|title }} Unique {{ cluster.facet_field.display|title }}{% if cluster.facet_field.display != 'rights' %}{{ cluster.unique|pluralize }}{% endif %}
-        {% endif %}</h4>
-        <ol>
-          {% for value in cluster.values %}
-            {% if forloop.counter0 < 5 %}
-            <li>
-              {% if forloop.counter0 == 0 %}<strong>{% endif %}
-                <a href="{{ value.uri }}?view_format=list" data-pjax="js-pageContent">{{ value.label }} ({{ value.count|intcomma }} items)</a>
-              {% if forloop.counter0 == 0 %}</strong>{% endif %}
-            </li>
-            {% endif %}
-          {% endfor %}
-        </ol>
+      <div class="col-md-12 cluster-listing">
+        <h3>{{ cluster.unique|intcomma }} {{ cluster.facet_field.display|title }}{% if cluster.facet_field.display != 'rights' %}s{% endif %} in this Collection</h3>
+
         {% if cluster.unique > 3 %}
-        <h4>Search for a {{cluster.facet_field.display}}</h4>
-        <form class="clustersearch__form-{{cluster.facet_field.facet}}" role="search" onsubmit="false()">
-          <label for="clustersearch__field-{{cluster.facet_field.facet}}" class="sr-only">
-            Search for a {{cluster.facet_field.display}}
-          </label>
-          <div class="input-group">
-            <input id="clustersearch__field-{{cluster.facet_field.facet}}" type="search" placeholder="Search for a {{cluster.facet_field.display}}" class="form-control">
-              <span class="input-group-btn">
-                <button class="btn btn-default global-search__button" type="submit" aria-label="search"><span class="fa fa-search"></span>
-                </button>
-              </span>
-            </input>
-          </div>
-        </form>
+        <div class="row">
+        <div class="col-md-5">
+          <h4 class="sr-only">Search for a {{cluster.facet_field.display}}</h4>
+          <form class="clustersearch__form-{{cluster.facet_field.facet}}" role="search" onsubmit="false()">
+            <label for="clustersearch__field-{{cluster.facet_field.facet}}" class="sr-only">
+              Search for a {{cluster.facet_field.display}}
+            </label>
+            <div class="input-group">
+              <input id="clustersearch__field-{{cluster.facet_field.facet}}" type="search" placeholder="Search for a {{cluster.facet_field.display}}" class="form-control">
+                <span class="input-group-btn">
+                  <button class="btn btn-default global-search__button" type="submit" aria-label="search"><span class="fa fa-search"></span>
+                  </button>
+                </span>
+              </input>
+            </div>
+          </form>
+        </div>
+        </div>
         {% endif %}
 
-        <h4><a href="{{ form_action }}{{ cluster.facet_field.facet }}/" data-pjax="js-pageContent">See all {{ cluster.unique|intcomma }} unique {{ cluster.facet_field.display|lower }}{% if cluster.facet_field.display != 'rights' %}s{% endif %}</a></h4>
+        <ol>
+          {% for value in cluster.values %}
+            {# if forloop.counter0 < 5 #}
+            <li>
+              <a href="{{ value.uri }}?view_format=list" data-pjax="js-pageContent">{{ value.label }} ({{ value.count|intcomma }} items)</a>
+            </li>
+            {# endif #}
+          {% endfor %}
+        </ol>
+
       </div>
       <a href="{{cluster.values.0.uri}}" data-pjax="js-pageContent">
-      <div class="col-md-7">
-        <div class="browse-cluster-thumbnail__container">
-          {% for thumb in cluster.thumbnails %}
-            {% if forloop.counter0 == 1 %}
-            <div class="browse-cluster-thumbnail__container2">
-            {% endif %}
-            {% if forloop.counter0 == 2 %}
-            <div class="browse-cluster-thumbnail__container3">
-            {% endif %}
-
-            <div class="browse-cluster-thumbnail__{{forloop.counter0}}"
-              style="background-image: url({{ thumbnailUrl }}crop/210x210/{{ thumb.reference_image_md5 }})">
-
-                {% if 'reference_image_md5' in thumb %}
-                  {% if thumb.type_ss.0|lower == "moving image" %}
-                  <div class="thumbnail__overlay-icon fa-play-circle-o"></div>
-                  {% elif thumb.type_ss.0|lower == "sound"%}
-                  <div class="thumbnail__overlay-icon fa-volume-up"></div>
-                  {# elif thumb.type_ss.0|lower == "text" #}
-                  <!-- <div class="thumbnail__overlay-icon fa-file-text-o"></div> -->
-                  {% elif thumb.type_ss.0|lower == "dataset" %}
-                  <div class="thumbnail__overlay-icon fa-bar-chart"></div>
-                  {% endif %}
-
-                {% else %}
-                  {% if thumb.type_ss.0|lower == "moving image" %}
-                  <div class="thumbnail__tile-icon fa-play-circle-o"></div>
-                  {% elif thumb.type_ss.0|lower == "sound"%}
-                  <div class="thumbnail__tile-icon fa-volume-up"></div>
-                  {% elif thumb.type_ss.0|lower == "text"%}
-                  <div class="thumbnail__tile-icon fa-file-text-o"></div>
-                  {% elif thumb.type_ss.0|lower == "dataset" %}
-                  <div class="thumbnail__tile-icon fa-bar-chart"></div>
-                  {% elif thumb.type_ss.0|lower == "image" %}
-                  <div class="thumbnail__tile-icon fa-picture-o"></div>
-                  {% endif %}
-                {% endif %}
-
-            </div>
-          {% endfor %}
-            {% if cluster.thumbnails|length == 2 %}
-            <div class="browse-cluster-thumbnail__container3">
-            {% endif %}
-            <div class="browse-cluster-thumbnail__{{cluster.thumbnails|length}} browse-cluster-thumbnail__description">
-              View all items with {{ cluster.facet_field.display }} "{{cluster.values.0.label|truncatewords:4}}" in this collection.
-            </div>
-          {% if cluster.thumbnails|length >= 2 %}
-          </div></div>
-          {% endif %}
-        </div>
-      </div>
       </a>
     </div>
     {% endfor %}

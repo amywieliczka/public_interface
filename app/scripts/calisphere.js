@@ -298,7 +298,7 @@ var on_ready_pjax_end_handler = function() {
       cluster_search(clusters.collection_id, clusters.clusters[i]);
     }
     $('.explore-clusters-carousel').slick({
-      autoplay: true,
+      autoplay: false,
       autoplaySpeed: 6000,
       dots: true,
       infinite: true,
