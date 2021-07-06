@@ -5,13 +5,14 @@ from django.conf import settings
 from calisphere.home import HomeView
 from . import views
 from . import collection_views
+from . import item_views
 
 app_name = 'calisphere'
 
 urlpatterns = [
     url(r'^$', HomeView.as_view(), name='home'),
     url(r'^search/$', views.search, name='search'),
-    url(r'^item/(?P<item_id>.*)/$', views.itemView, name='itemView'),
+    url(r'^item/(?P<item_id>.*)/$', item_views.itemView, name='itemView'),
     url(r'^collections/$',
         collection_views.collectionsDirectory,
         name='collectionsDirectory'),

@@ -47,16 +47,16 @@
       </dd>
     {% endif %}
 
-    {% if 'parsed_collection_data' in item %}
+    {% if 'collection_objects' in item %}
       <dt class="meta-block__type">Collection</dt>
-      <dd class="meta-block__defin" itemprop="isPartOf">{% for collection in item.parsed_collection_data %}
+      <dd class="meta-block__defin" itemprop="isPartOf">{% for collection in item.collection_objects %}
         <a
           href="{% url 'calisphere:collectionView' collection.id %}"
           data-pjax="js-pageContent"
           class="js-relatedCollection"
-          data-ga-dim1="{{ collection.local_id }}{{ collection.slug }}"
-          data-ga-dim4="{{ collection.harvest_type }}"
-        >{{ collection.name }}</a> <br> {% endfor %}</dd>
+          data-ga-dim1="{{ collection.details.local_id }}{{ collection.details.slug }}"
+          data-ga-dim4="{{ collection.details.harvest_type }}"
+        >{{ collection.details.name }}</a> <br> {% endfor %}</dd>
     {% endif %}
 
     {% if 'rights' or 'rights_uri' in item %}
@@ -145,7 +145,7 @@
 			<dt class="meta-block__type">Relation</dt>
 			<dd class="meta-block__defin">{% for relation in item.relation %}
         <a
-          href="{% url 'calisphere:collectionView' item.parsed_collection_data.0.id %}?relation_ss={{ relation }}"
+          href="{% url 'calisphere:collectionView' item.collection_objects.0.id %}?relation_ss={{ relation }}"
           data-relation="{{ relation }}"
           data-pjax="js-pageContent"
           class="js-relatedCollection"

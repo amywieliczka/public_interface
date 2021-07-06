@@ -11,9 +11,9 @@
     </li>
   {% endif %}
 
-  {% if item.parsed_collection_data %}
+  {% if item.collection_objects %}
     <li>
-      <a href="{% url 'calisphere:collectionView' item.parsed_collection_data.0.id %}" data-pjax="js-pageContent" class="js-relatedCollection">{{ item.parsed_collection_data.0.name }}</a>
+      <a href="{% url 'calisphere:collectionView' item.collection_objects.0.id %}" data-pjax="js-pageContent" class="js-relatedCollection">{{ item.collection_objects.0.details.name }}</a>
     </li>
   {% endif %}
     <li>{{ item.title.0 }}</li>
@@ -94,9 +94,9 @@
   </div>
 </div>
 
-{% if item.parsed_collection_data.0.disqus_shortname %}
+{% if item.collection_objects.0.disqus_shortname %}
 <div class="comment">
-  <div id="disqus_loader" class="comment_clickthrough" data-disqus="{{ item.parsed_collection_data.0.disqus_shortname }}">
+  <div id="disqus_loader" class="comment_clickthrough" data-disqus="{{ item.collection_objects.0.disqus_shortname }}">
     <div class="comment__text">
       <h2>New! This item supports comments!</h2>
       <p>We are testing a commenting feature on this item. <button class="button__link js-disqus">Load comments</button>.</p>

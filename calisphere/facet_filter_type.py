@@ -165,7 +165,10 @@ class FacetFilterType(object):
         return display_facets
 
     def __str__(self):
-        return f'FacetFilterTypeClass: {self.facet}'
+        return f'{self.display_name}: {self.facet}'
+
+    def __repr__(self):
+        return f'{self.display_name}: {self.facet}, filter: {self.filter}'
 
     def __getitem__(self, key):
         return getattr(self, key)

@@ -130,6 +130,15 @@ class Collection(object):
         self.custom_facets = self._parse_custom_facets()
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
+        prod = (settings.UCLDC_FRONT == 'https://calisphere.org/' 
+            or settings.UCLDC_DISQUS == 'prod')
+        if prod:
+            self.disqus_shortname = self.details.get(
+                'disqus_shortname_prod')
+        else:
+            self.disqus_shortname = self.details.get(
+                'disqus_shortname_test')
+
     def _parse_custom_facets(self):
         custom_facets = []
         if self.details.get('custom_facet'):

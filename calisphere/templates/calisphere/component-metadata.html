@@ -151,15 +151,15 @@
       </dd>
     {% endif %}
 
-    {% if item.parsed_collection_data %}
+    {% if item.collection_objects %}
       <dt class="meta-block__type">Collection</dt>
-      <dd class="meta-block__defin">{% for collection in item.parsed_collection_data %}
+      <dd class="meta-block__defin">{% for collection in item.collection_objects %}
         <a
           href="{% url 'calisphere:collectionView' collection.id %}"
           data-pjax="js-pageContent"
           class="js-relatedCollection"
-          data-ga-dim1="{{ collection.local_id }}{{ collection.slug }}"
-       >{{ collection.name }}</a> <br> {% endfor %}</dd>
+          data-ga-dim1="{{ collection.details.local_id }}{{ collection.details.slug }}"
+       >{{ collection.details.name }}</a> <br> {% endfor %}</dd>
     {% endif %}
 
   </dl>
