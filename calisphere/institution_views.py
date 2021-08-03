@@ -8,7 +8,7 @@ from . import search_form
 from .collection_views import Collection, get_related_collections
 from django.apps import apps
 from django.conf import settings
-
+from elasticsearch import Elasticsearch
 
 import math
 import re
@@ -37,21 +37,47 @@ def process_sort_collection_data(string):
         return [part1, part2, 'https:{}'.format(part3)]
 
 
-def campus_directory(request):
-    repositories_solr_query = SOLR_select(
-        q='*:*',
-        rows=0,
-        start=0,
-        facet='true',
-        facet_mincount=1,
-        facet_field=['repository_url'],
-        facet_limit='-1')
-    solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
-        'repository_url']
 
+elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
+
+
+def campus_directory(request):
+
+    repositories_es_query = elastic_client.search(
+        index="calisphere-items",
+        body={
+            "size": 0,
+            "aggs": {
+                "repository_id": {
+                    "terms": {
+                        "field": "repository_ids"
+                    }
+                }
+            }
+        })
+    try:
+        es_repositories = repositories_es_query.get('aggregations').get(
+            'repository_id').get('buckets')
+        es_repositories = [bucket.get('key') for bucket in es_repositories]
+    except KeyError:
+        print(f"ES error: {repositories_es_query}")
+
+    # repositories_solr_query = SOLR_select(
+    #     q='*:*',
+    #     rows=0,
+    #     start=0,
+    #     facet='true',
+    #     facet_mincount=1,
+    #     facet_field=['repository_url'],
+    #     facet_limit='-1')
+    # solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
+    #     'repository_url']
+    # 
+    # repositories = []
+    # for repository_url in solr_repositories:
+    #   repo_id = re.match(repo_regex, repository_url).group('repository_id')
     repositories = []
-    for repository_url in solr_repositories:
-        repo_id = re.match(repo_regex, repository_url).group('repository_id')
+    for repo_id in es_repositories:
         repository = Repository(repo_id).get_repo_data()
         if repository['campus']:
             repositories.append({
@@ -77,19 +103,41 @@ def campus_directory(request):
 
 
 def statewide_directory(request):
-    repositories_solr_query = SOLR_select(
-        q='*:*',
-        rows=0,
-        start=0,
-        facet='true',
-        facet_mincount=1,
-        facet_field=['repository_url'],
-        facet_limit='-1')
-    solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
-        'repository_url']
+    repositories_es_query = elastic_client.search(
+        index="calisphere-items",
+        body={
+            "size": 0,
+            "aggs": {
+                "repository_id": {
+                    "terms": {
+                        "field": "repository_ids"
+                    }
+                }
+            }
+        })
+    try:
+        es_repositories = repositories_es_query.get('aggregations').get(
+            'repository_id').get('buckets')
+        es_repositories = [bucket.get('key') for bucket in es_repositories]
+    except KeyError:
+        print(f"ES error: {repositories_es_query}")
+
+    # repositories_solr_query = SOLR_select(
+    #     q='*:*',
+    #     rows=0,
+    #     start=0,
+    #     facet='true',
+    #     facet_mincount=1,
+    #     facet_field=['repository_url'],
+    #     facet_limit='-1')
+    # solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
+    #     'repository_url']
+    # 
+    # repositories = []
+    # for repository_url in solr_repositories:
+    #     repo_id = re.match(repo_regex, repository_url).group('repository_id')
     repositories = []
-    for repository_url in solr_repositories:
-        repo_id = re.match(repo_regex, repository_url).group('repository_id')
+    for repo_id in es_repositories:
         repository = Repository(repo_id).get_repo_data()
         if repository['campus'] == '':
             repositories.append({
@@ -153,6 +201,7 @@ class Campus(object):
             self.contact_info = ''
 
         self.solr_filter = 'campus_url: "' + self.url + '"'
+        self.es_filter = 'campus_ids'
 
 
 class Repository(object):
@@ -181,9 +230,10 @@ class Repository(object):
             feat = [u for u in constants.FEATURED_UNITS
                     if u['id'] == self.id][0]
             if feat:
-                self.featured_image = feat.get('featuredImage')
+                self.featured_image = feat[0].get('featuredImage')
 
         self.solr_filter = 'repository_url: "' + self.url + '"'
+        self.es_filter = 'repository_ids'
 
     def get_repo_data(self):
         repository = {
@@ -270,23 +320,47 @@ def institution_collections(request, institution):
     page = int(request.GET['page']) if 'page' in request.GET else 1
 
     collections_params = {
-        'q': '',
-        'rows': 0,
-        'start': 0,
-        'fq': [institution.solr_filter],
-        'facet': 'true',
-        'facet_mincount': 1,
-        'facet_limit': '-1',
-        'facet_field': ['sort_collection_data'],
-        'facet_sort': 'index'
+        "query": {
+            "term": {
+                institution.es_filter: institution.id
+            }
+        },
+        "size": 0,
+        "aggs": {
+            "collection_data": {
+                "terms": {
+                    "field": "sort_collection_data.keyword",
+                    "order": {
+                        "_key": "asc"
+                    }
+                }
+            }
+        }
     }
+    collections_es_search = elastic_client.search(
+        index="calisphere-items", body=collections_params)
+    sort_collection_data = collections_es_search.get('aggregations').get(
+        'collection_data').get('buckets')
+    # make es output look like solr output
+    sort_collection_data = {c['key']: c['doc_count'] 
+                            for c in sort_collection_data}
 
-    collections_solr_search = SOLR_select(**collections_params)
+    # collections_params = {
+    #     'q': '',
+    #     'rows': 0,
+    #     'start': 0,
+    #     'fq': [institution.solr_filter],
+    #     'facet': 'true',
+    #     'facet_mincount': 1,
+    #     'facet_limit': '-1',
+    #     'facet_field': ['sort_collection_data'],
+    #     'facet_sort': 'index'
+    # }
+    # collections_solr_search = SOLR_select(**collections_params)
+    # sort_collection_data = (collections_solr_search.facet_counts
+    #                         ['facet_fields']['sort_collection_data'])
 
-    pages = int(
-        math.ceil(
-            len(collections_solr_search.facet_counts[
-                'facet_fields']['sort_collection_data']) / 10))
+    pages = int(math.ceil(len(sort_collection_data) / 10))
 
     # solrpy gives us a dict == unsorted (!)
     # use the `facet_decade` mode of process_facets to do a
@@ -294,11 +368,7 @@ def institution_collections(request, institution):
     solr_related_collections = list(
         collection[0] for collection in
         constants.DEFAULT_FACET_FILTER_TYPES[3].process_facets(
-            collections_solr_search.facet_counts['facet_fields']
-            ['sort_collection_data'],
-            [],
-            'value',
-        ))
+            sort_collection_data, [], 'value'))
     start = ((page-1) * 10)
     end = page * 10
     solr_related_collections = solr_related_collections[start:end]
@@ -307,7 +377,8 @@ def institution_collections(request, institution):
     for i, related_collection in enumerate(solr_related_collections):
         collection_parts = process_sort_collection_data(
             related_collection)
-        col_id = re.match(col_regex, collection_parts[2]).group('id')
+        # col_id = re.match(col_regex, collection_parts[2]).group('id')
+        col_id = collection_parts[2]
         try:
             related_collections.append(
                 Collection(col_id).get_mosaic())
@@ -451,25 +522,55 @@ def campus_collections(request, campus_slug):
 def campus_institutions(request, campus_slug):
     institution = Campus(campus_slug)
 
-    institutions_solr_search = SOLR_select(
-        q='',
-        rows=0,
-        start=0,
-        fq=['campus_url: "' + institution.url + '"'],
-        facet='true',
-        facet_mincount=1,
-        facet_limit='-1',
-        facet_field=['repository_data'])
+    institutions_es_search = elastic_client.search(
+        index="calisphere-items",
+        body={
+            "query": {
+                "term": {
+                    "campus_ids": institution.id
+                }
+            },
+            "size": 0,
+            "aggs": {
+                "repository_data": {
+                    "terms": {
+                        "field": "repository_data.keyword"
+                    }
+                }
+            }
+        })
+    institutions_es = institutions_es_search.get('aggregations').get(
+        'repository_data').get('buckets')
+    # make this look like solr, for 'process_facets'
+    # TODO: rework, do we need to 'process_facets'? 
+    institutions = {agg.get('key'): agg.get('doc_count') 
+                    for agg in institutions_es}
+
+    # institutions_solr_search = SOLR_select(
+    #     q='',
+    #     rows=0,
+    #     start=0,
+    #     fq=['campus_url: "' + institution.url + '"'],
+    #     facet='true',
+    #     facet_mincount=1,
+    #     facet_limit='-1',
+    #     facet_field=['repository_data'])
+
+    # related_institutions = list(
+    #     institution[0] for institution in
+    #     constants.DEFAULT_FACET_FILTER_TYPES[2].process_facets(
+    #         institutions_solr_search.facet_counts['facet_fields']
+    #         ['repository_data'], []))
 
     related_institutions = list(
-        institution[0] for institution in
+        institution[0] for institution in 
         constants.DEFAULT_FACET_FILTER_TYPES[2].process_facets(
-            institutions_solr_search.facet_counts['facet_fields']
-            ['repository_data'], []))
+            institutions, []))
 
     for i, related_institution in enumerate(related_institutions):
-        repo_url = related_institution.split('::')[0]
-        repo_id = re.match(repo_regex, repo_url).group('repository_id')
+        # repo_url = related_institution.split('::')[0]
+        # repo_id = re.match(repo_regex, repo_url).group('repository_id')
+        repo_id = related_institution.split('::')[0]
         related_institutions[i] = Repository(repo_id).get_repo_data()
     related_institutions = sorted(
         related_institutions,
