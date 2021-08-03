@@ -12,8 +12,11 @@ from .cache_retry import json_loads_url
 from django.core.cache import cache
 from django.conf import settings
 import time
+from elasticsearch import Elasticsearch
 
 CollectionLink = namedtuple('CollectionLink', 'url, label')
+
+elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
 
 
 class CollectionManager(object):
@@ -34,23 +37,41 @@ class CollectionManager(object):
             self.total_objects = saved.get('total_objects', 850000)
         else:
             # look it up from solr
-            url = (
-                '{0}/query?facet.field=collection_data&facet=on&rows=0&facet.limit=-1&facet.mincount=1'
-                .format(solr_url))
-            req = urllib.request.Request(url, None,
-                                         {'X-Authentication-Token': solr_key})
+            es_query = {
+                "size": 0,
+                "aggs": {
+                    "collection_data": {
+                        "terms": {
+                            "field": "collection_data.keyword",
+                        }
+                    }
+                }
+            }
+            es_data = elastic_client.search(
+                index="calisphere-items", body=es_query)
+            collections = es_data.get('aggregations').get('collection_data').get(
+                'buckets')
+            collections = [c['key'] for c in collections]
+
+            # url = (
+            #     '{0}/query?facet.field=collection_data&facet=on&rows=0&facet.limit=-1&facet.mincount=1'
+            #     .format(solr_url))
+            # req = urllib.request.Request(url, None,
+            #                              {'X-Authentication-Token': solr_key})
             save = {}
-            solr_data = json_loads_url(req)
-            save['data'] = self.data = solr_data['facet_counts'][
-                'facet_fields']['collection_data'][::2]
+            # solr_data = json_loads_url(req)
+            # save['data'] = self.data = solr_data['facet_counts'][
+            #     'facet_fields']['collection_data'][::2]
+            save['data'] = self.data = collections
             self.parse()
             save['parsed'] = self.parsed
             save['names'] = self.names
             save['split'] = self.split
             save['no_collections'] = self.no_collections
             save['shuffled'] = self.shuffled
-            save['total_objects'] = self.total_objects = solr_data['response'][
-                'numFound']
+            # save['total_objects'] = self.total_objects = solr_data['response'][
+            #     'numFound']
+            save['total_objects'] = es_data.get('hits').get('total').get('value')
             cache.set(cache_key, save, settings.DJANGO_CACHE_TIMEOUT)
 
     def parse(self):
@@ -81,6 +102,11 @@ class CollectionManager(object):
                             split_collections[current_char] = []
                         split_collections[current_char].append(collection_link)
                     break
+
+        while(current_char <= 'z'):
+            current_char = chr(ord(current_char) + 1)
+            split_collections[current_char] = []
+
         self.split = split_collections
         self.names = names
 

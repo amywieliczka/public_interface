@@ -9,6 +9,7 @@ from .facet_filter_type import FacetFilterType
 from .cache_retry import SOLR_select, json_loads_url
 from . import search_form
 from builtins import range
+from elasticsearch import Elasticsearch
 
 import os
 import math
@@ -16,11 +17,15 @@ import string
 import urllib.parse
 import re
 
+elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
+
+
 standard_library.install_aliases()
 
 col_regex = (r'https://registry\.cdlib\.org/api/v1/collection/'
              r'(?P<id>\d*)/?')
 col_template = "https://registry.cdlib.org/api/v1/collection/{0}/"
+
 
 def collections_directory(request):
     solr_collections = CollectionManager(settings.SOLR_URL,
@@ -31,7 +36,8 @@ def collections_directory(request):
 
     for collection_link in solr_collections.shuffled[(page - 1) * 10:page *
                                                      10]:
-        col_id = re.match(col_regex, collection_link.url).group('id')
+        # col_id = re.match(col_regex, collection_link.url).group('id')
+        col_id = collection_link.url
         try:
             collections.append(Collection(col_id).get_mosaic())
         except Http404:
@@ -67,7 +73,8 @@ def collections_az(request, collection_letter):
 
     collections = []
     for collection_link in collections_list[(page - 1) * 10:page * 10]:
-        col_id = re.match(col_regex, collection_link.url).group('id')
+        # col_id = re.match(col_regex, collection_link.url).group('id')
+        col_id = collection_link.url
         try:
             collections.append(Collection(col_id).get_mosaic())
         except Http404:
@@ -100,8 +107,9 @@ def collections_titles(request):
 
     def djangoize(uri):
         '''turn registry URI into URL on django site'''
-        collection_id = uri.split(
-            'https://registry.cdlib.org/api/v1/collection/', 1)[1][:-1]
+        # collection_id = uri.split(
+        #     'https://registry.cdlib.org/api/v1/collection/', 1)[1][:-1]
+        collection_id = uri
         return reverse(
             'calisphere:collectionView',
             kwargs={'collection_id': collection_id})
@@ -184,13 +192,25 @@ class Collection(object):
         if hasattr(self, 'item_count'):
             return self.item_count
 
-        solr_params = {
-            'facet': 'false',
-            'rows': 0,
-            'fq': 'collection_url:"{}"'.format(self.url),
+        # solr_params = {
+        #     'facet': 'false',
+        #     'rows': 0,
+        #     'fq': 'collection_url:"{}"'.format(self.url),
+        # }
+        # solr_search = SOLR_select(**solr_params)
+        # self.item_count = solr_search.numFound
+
+        es_params = {
+            "query": {
+                "term": {
+                    "collection_ids": self.id
+                }
+            },
+            "size": 0
         }
-        solr_search = SOLR_select(**solr_params)
-        self.item_count = solr_search.numFound
+        es_search = elastic_client.search(
+            index="calisphere-items", body=es_params)
+        self.item_count = es_search.get('hits').get('total').get('value')
         return self.item_count
 
     def _choose_facet_sets(self, facet_set):
@@ -227,22 +247,49 @@ class Collection(object):
 
     def get_facets(self, facet_fields):
         # facet=true&facet.query=*&rows=0&facet.field=title_ss&facet.pivot=title_ss,collection_data"
-        solr_params = {
-            'facet': 'true',
-            'rows': 0,
-            'facet_field': [f"{ff.facet}_ss" for ff in facet_fields],
-            'fq': 'collection_url:"{}"'.format(self.url),
-            'facet_limit': '-1',
-            'facet_mincount': 1,
-            'facet_sort': 'count',
-        }
-        solr_search = SOLR_select(**solr_params)
-        self.item_count = solr_search.numFound
+        # solr_params = {
+        #     'facet': 'true',
+        #     'rows': 0,
+        #     'facet_field': [f"{ff.facet}_ss" for ff in facet_fields],
+        #     'fq': 'collection_url:"{}"'.format(self.url),
+        #     'facet_limit': '-1',
+        #     'facet_mincount': 1,
+        #     'facet_sort': 'count',
+        # }
+        # solr_search = SOLR_select(**solr_params)
+        # self.item_count = solr_search.numFound
 
+        es_params = {
+            "query": {
+                "term": {
+                    'collection_ids': self.id
+                }
+            },
+            "size": 0,
+            "aggs": {}
+        }
+        for ff in facet_fields:
+            es_params['aggs'][ff.facet] = {
+                "terms": {
+                    "field": f'{ff.facet}.keyword',
+                    "size": 10000
+                }
+            }
+        # regarding 'size' parameter here and getting back all the facet values
+        # please see: https://github.com/elastic/elasticsearch/issues/18838
+        es_search = elastic_client.search(
+            index="calisphere-items", body=es_params)
+        self.item_count = es_search.get('hits').get('total').get('value')
+        # print(es_search.get('aggregations'))
+        
         facets = []
         for facet_field in facet_fields:
-            values = solr_search.facet_counts.get('facet_fields').get(
-                '{}_ss'.format(facet_field.facet))
+            values = es_search.get('aggregations').get(facet_field.facet).get(
+                'buckets')
+            # make it look like solr
+            values = {v['key']: v['doc_count'] for v in values}
+            # values = solr_search.facet_counts.get('facet_fields').get(
+            #     '{}_ss'.format(facet_field.facet))
             if not values:
                 facets.append(None)
 
