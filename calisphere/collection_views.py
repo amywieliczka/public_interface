@@ -156,10 +156,15 @@ class Collection(object):
             for custom_facet in self.details.get('custom_facet'):
                 custom_facets.append(
                     FacetFilterType(
-                        custom_facet['facet_field'],
-                        custom_facet['label'],
-                        custom_facet['facet_field'],
-                        custom_facet.get('sort_by', 'count')
+                        None,
+                        type={
+                            'form_name': custom_facet['facet_field'],
+                            'solr_facet_field': custom_facet['facet_field'],
+                            'display_name': custom_facet['label'],
+                            'solr_filter_field': custom_facet['facet_field'],
+                            'sort_by': 'count',
+                            'faceting_allowed': True
+                        }
                     )
                 )
         return custom_facets
@@ -426,7 +431,6 @@ def collection_search(request, collection_id):
 
     form = CollectionForm(request, collection)
     results = form.search()
-    facets = form.facet_query(results.facet_counts, collection.solr_filter)
     filter_display = form.filter_display()
 
     if settings.UCLDC_FRONT == 'https://calisphere.org/':
@@ -437,7 +441,7 @@ def collection_search(request, collection_id):
     context = {
         'q': form.q,
         'search_form': form.context(),
-        'facets': facets,
+        'facets': form.get_facets(collection.solr_filter),
         'pages': int(math.ceil(results.numFound / int(form.rows))),
         'numFound': results.numFound,
         'search_results': results.results,
@@ -445,8 +449,6 @@ def collection_search(request, collection_id):
         'browse': browse,
         'meta_robots': None,
         'totalNumItems': collection.get_item_count(),
-        'FACET_FILTER_TYPES':
-        form.facet_filter_types,
         'collection':
         collection.details,
         'collection_id':
@@ -574,13 +576,11 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
         'search_results': results.results,
         'numFound': results.numFound,
         'pages': int(math.ceil(results.numFound / int(form.rows))),
-        'facets': form.facet_query(
-            results.facet_counts, collection.solr_filter),
+        'facets': form.get_facets(collection.solr_filter),
         'filters': form.filter_display(),
         'cluster': cluster,
         'cluster_value': parsed_cluster_value,
         'meta_robots': "noindex,nofollow",
-        'FACET_FILTER_TYPES': form.facet_filter_types,
         'collection': collection.details,
         'collection_id': collection_id,
         'title': (
