@@ -3,14 +3,13 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.http import Http404
 from . import constants
-from .cache_retry import SOLR_select, json_loads_url
+from .cache_retry import SOLR_select, json_loads_url, elastic_client
 from .search_form import CampusForm, RepositoryForm
 from .collection_views import Collection, get_rc_from_ids
 from .facet_filter_type import (
     CollectionFF, RepositoryFF)
 from django.apps import apps
 from django.conf import settings
-from elasticsearch import Elasticsearch
 
 import math
 import re
@@ -37,10 +36,6 @@ def process_sort_collection_data(string):
         part1, remainder = string.split(':', 1)
         part2, part3 = remainder.rsplit(':https:')
         return [part1, part2, 'https:{}'.format(part3)]
-
-
-
-elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
 
 
 def campus_directory(request):

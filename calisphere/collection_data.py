@@ -8,15 +8,12 @@ import urllib.request, urllib.error, urllib.parse
 from collections import namedtuple
 import string
 import random
-from .cache_retry import json_loads_url
+from .cache_retry import json_loads_url, elastic_client
 from django.core.cache import cache
 from django.conf import settings
 import time
-from elasticsearch import Elasticsearch
 
 CollectionLink = namedtuple('CollectionLink', 'url, label')
-
-elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
 
 
 class CollectionManager(object):

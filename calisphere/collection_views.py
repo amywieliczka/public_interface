@@ -6,18 +6,15 @@ from django.http import Http404, JsonResponse
 from calisphere.collection_data import CollectionManager
 from . import constants
 from .facet_filter_type import FacetFilterType
-from .cache_retry import SOLR_select, json_loads_url
+from .cache_retry import SOLR_select, json_loads_url, elastic_client
 from .search_form import CollectionForm, solr_escape
 from builtins import range
-from elasticsearch import Elasticsearch
 
 import os
 import math
 import string
 import urllib.parse
 import re
-
-elastic_client = Elasticsearch(hosts=[es_host], http_auth=(es_user, es_pass))
 
 
 standard_library.install_aliases()

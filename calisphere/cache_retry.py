@@ -23,6 +23,13 @@ from aws_xray_sdk.core import patch
 if hasattr(settings, 'XRAY_RECORDER'):
     patch(('requests', ))
 
+# put this here for now
+from elasticsearch import Elasticsearch
+elastic_client = Elasticsearch(
+    hosts=[settings.ES_HOST],
+    http_auth=(settings.ES_USER, settings.ES_PASS))
+
+
 SOLR_DEFAULTS = {
     'mm': '100%',
     'pf3': 'title',

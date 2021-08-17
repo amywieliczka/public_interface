@@ -1,7 +1,8 @@
-from .cache_retry import SOLR_select
+from .cache_retry import SOLR_select, elastic_client
 from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
+import json
 
 
 def solr_escape(text):
@@ -40,6 +41,7 @@ class SearchForm(object):
             ff.RepositoryFF(request),
             ff.CollectionFF(request)
         ]
+
         for field in self.simple_fields:
             if isinstance(self.simple_fields[field], list):
                 self.__dict__.update({
@@ -71,6 +73,69 @@ class SearchForm(object):
             'facet_filter_types': fft
         }
         return search_form
+
+    def es_encode(self, facet_types=[]):
+        terms = (
+            [solr_escape(self.q)] +
+            [solr_escape(q) for q in self.rq] +
+            self.request.getlist('fq')
+        )
+        terms = [q for q in terms if q]
+        qt_string = terms[0] if len(terms) == 1 else " AND ".join(terms)
+
+        es_query_string = {
+            "query_string": {
+                "query": qt_string
+            }
+        }
+
+        es_query_filters = {
+            "bool": {
+                "should": [ft.es_query for ft in self.facet_filter_types
+                           if ft.es_query]
+            }
+        }
+
+        try:
+            rows = int(self.rows)
+            start = int(self.start)
+        except ValueError as err:
+            raise Http404("{0} does not exist".format(err))
+
+        sort = constants.SORT_OPTIONS[self.sort]
+        print(sort)
+
+        if len(facet_types) == 0:
+            facet_types = self.facet_filter_types
+
+        aggs = {}
+        for facet_type in facet_types:
+            aggs.update({
+                facet_type.es_facet_field: {
+                    "terms": {
+                        "field": facet_type.es_facet_field
+                    }
+                }
+            })
+
+        es_query = {
+            "query": {
+                "bool": {
+                    "must": [es_query_string],
+                    "filter": [es_query_filters]
+                }
+            },
+            "size": rows,
+            "from": start,
+            "aggs": aggs
+        }
+        # TODO: add sort!
+
+        # query_fields = self.request.get('qf')
+        # if query_fields:
+        #     solr_query.update({'qf': query_fields})
+
+        return es_query
 
     def solr_encode(self, facet_types=[]):
         # concatenate query terms from refine query and query box
@@ -116,6 +181,59 @@ class SearchForm(object):
 
         return solr_query
 
+    def es_get_facets(self, extra_filter=None):
+        # get facet counts
+        # if the user's selected some of the available facets (ie - there are
+        # filters selected for this field type) perform a search as if those
+        # filters were not applied to obtain facet counts
+        #
+        # since we AND filters of the same type, counts should go UP when
+        # more than one facet is selected as a filter, not DOWN (or'ed filters
+        # of the same type)
+
+        facets = {}
+        for fft in self.facet_filter_types:
+            if (len(fft.es_query) > 0):
+                exclude_filter = fft.es_query
+                fft.es_query = None
+                es_params = self.es_encode([fft])
+                fft.es_query = exclude_filter
+
+                if extra_filter:
+                    (es_params.get('query')
+                        .get('bool')
+                        .get('filter')[0]
+                        .get('bool')
+                        .get('should')
+                        .append({
+                            "terms": {
+                                fft.es_filter_field: [extra_filter]
+                            }
+                        }))
+
+                facet_search = elastic_client.search(
+                    index="calisphere-items", body=es_params)
+
+                values = facet_search.get('aggregations').get(
+                    fft.es_facet_field)
+
+            else:
+                values = self.facets.get(fft.es_facet_field)
+
+            # make it look like solr
+            self.facets[fft.es_facet_field] = {
+                v['key']: v['doc_count'] for v in values.get('buckets')}
+
+            es_facets = self.facets[fft.es_facet_field]
+
+            facets[fft.es_facet_field] = fft.process_facets(es_facets)
+
+            for j, facet_item in enumerate(facets[fft.form_name]):
+                facets[fft.es_facet_field][j] = (fft.es_facet_transform(
+                    facet_item[0]), facet_item[1])
+
+        return facets
+
     def get_facets(self, extra_filter=None):
         # get facet counts
         # if the user's selected some of the available facets (ie - there are
@@ -152,6 +270,27 @@ class SearchForm(object):
 
         return facets
 
+    def es_search(self, extra_filter=None):
+        # solr_query = self.solr_encode()
+        es_query = self.es_encode()
+
+        if extra_filter:
+            (es_query.get('query')
+                .get('bool')
+                .get('filter')[0]
+                .get('bool')
+                .get('should')
+                .append({
+                    "terms": {
+                        "extra": [extra_filter]
+                    }
+                }))
+
+        results = elastic_client.search(
+            index="calisphere-items", body=es_query)
+        self.facets = results.get('aggregations')
+        return results
+
     def search(self, extra_filter=None):
         solr_query = self.solr_encode()
         if extra_filter:
@@ -159,6 +298,18 @@ class SearchForm(object):
         results = SOLR_select(**solr_query)
         self.facets = results.facet_counts['facet_fields']
         return results
+
+    def es_filter_display(self):
+        filter_display = {}
+        for filter_type in self.facet_filter_types:
+            param_name = filter_type['es_facet_field']
+            display_name = filter_type['es_filter_field']
+            filter_transform = filter_type['filter_display']
+
+            if len(self.request.getlist(param_name)) > 0:
+                filter_display[display_name] = list(
+                    map(filter_transform, self.request.getlist(param_name)))
+        return filter_display
 
     def filter_display(self):
         filter_display = {}
