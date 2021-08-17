@@ -61,8 +61,6 @@ class SearchForm(object):
                 })
 
         self.sort = self.sort_field(request).sort
-        self.solr_query = self.solr_encode()
-        self.es_query = self.es_encode()
 
     def context(self):
         fft = [{
@@ -96,13 +94,17 @@ class SearchForm(object):
             terms[0] if len(terms) == 1 else " AND ".join(terms))
 
         es_query_string = {
-            "query_string": {
-                "query": self.query_string
-            }
+            "must": [{
+                "query_string": {
+                    "query": self.query_string
+                }
+            }]
         }
 
-        es_query_filters = [ft.es_query for ft in self.facet_filter_types
-                            if ft.es_query]
+        es_query_filters = {
+            "filter": [ft.es_query for ft in self.facet_filter_types
+                       if ft.es_query]
+        }
 
         try:
             rows = int(self.rows)
@@ -126,12 +128,12 @@ class SearchForm(object):
                 }
             })
 
+        if self.query_string:
+            es_query_filters.update(es_query_string)
+
         es_query = {
             "query": {
-                "bool": {
-                    "must": [es_query_string],
-                    "filter": es_query_filters
-                }
+                "bool": es_query_filters
             },
             "size": rows,
             "from": start,
@@ -210,13 +212,9 @@ class SearchForm(object):
                 if extra_filter:
                     (es_params.get('query')
                         .get('bool')
-                        .get('filter')[0]
-                        .get('bool')
-                        .get('should')
+                        .get('filter')
                         .append({
-                            "terms": {
-                                fft.es_filter_field: [extra_filter]
-                            }
+                            "terms": extra_filter
                         }))
 
                 facet_search = elastic_client.search(
@@ -279,15 +277,13 @@ class SearchForm(object):
         return facets
 
     def es_search(self, extra_filter=None):
-        # solr_query = self.solr_encode()
-        es_query = self.es_query
+        es_query = self.es_encode()
 
+        # todo! obviously extra filter is not called 'extra'
         if extra_filter:
             (es_query.get('query')
                 .get('bool')
-                .get('filter')[0]
-                .get('bool')
-                .get('should')
+                .get('filter')
                 .append({
                     "terms": {
                         "extra": [extra_filter]
@@ -314,7 +310,7 @@ class SearchForm(object):
         return es_results
 
     def search(self, extra_filter=None):
-        solr_query = self.solr_query
+        solr_query = self.solr_encode()
         if extra_filter:
             solr_query['fq'].append(extra_filter)
         results = SOLR_select(**solr_query)
@@ -356,6 +352,16 @@ class CampusForm(SearchForm):
         solr_query['fq'].append(self.institution.solr_filter)
         return solr_query
 
+    def es_encode(self, facet_types=[]):
+        es_query = super().es_encode(facet_types)
+        (es_query.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": self.institution.es_filter
+            }))
+        return es_query
+
 
 class RepositoryForm(SearchForm):
     facet_filter_fields = [
@@ -372,12 +378,23 @@ class RepositoryForm(SearchForm):
         solr_query['fq'].append(self.institution.solr_filter)
         return solr_query
 
+    def es_encode(self, facet_types=[]):
+        es_query = super().es_encode(facet_types)
+        (es_query.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": self.institution.es_filter
+            }))
+        return es_query
+
 
 class CollectionForm(SearchForm):
     facet_filter_fields = [
         ff.TypeFF,
         ff.DecadeFF,
     ]
+
     def __init__(self, request, collection):
         super().__init__(request)
         self.collection = collection
@@ -396,6 +413,16 @@ class CollectionForm(SearchForm):
         solr_query = super().solr_encode(facet_types)
         solr_query['fq'].append(self.collection.solr_filter)
         return solr_query
+
+    def es_encode(self, facet_types=[]):
+        es_query = super().es_encode(facet_types)
+        (es_query.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": self.collection.es_filter
+            }))
+        return es_query
 
 
 class AltSortField(SortField):

@@ -187,7 +187,7 @@ class Campus(object):
 
         self.details = json_loads_url(self.url + "?format=json")
         if not self.details:
-            raise Http404("{0} does not exist".format(id))
+            raise Http404("{0} does not exist".format(self.id))
 
         self.name = self.full_name = self.details.get('name')
         if self.details.get('ark'):
@@ -198,7 +198,7 @@ class Campus(object):
             self.contact_info = ''
 
         self.solr_filter = 'campus_url: "' + self.url + '"'
-        self.es_filter = 'campus_ids'
+        self.es_filter = {'campus_ids': [self.id]}
 
 
 class Repository(object):
@@ -230,7 +230,7 @@ class Repository(object):
                 self.featured_image = feat[0].get('featuredImage')
 
         self.solr_filter = 'repository_url: "' + self.url + '"'
-        self.es_filter = 'repository_ids'
+        self.es_filter = {'repository_ids': [self.id]}
 
     def __str__(self):
         return f"{self.id}: {self.details.name}"
@@ -276,22 +276,22 @@ class Repository(object):
 
 
 def institution_search(request, form, institution):
-    results = form.search()
-    facets = form.get_facets(institution.solr_filter)
-    filter_display = form.filter_display()
+    results = form.es_search()
+    facets = form.es_get_facets(institution.es_filter)
+    filter_display = form.es_filter_display()
 
     page = (int(form.start) // int(form.rows)) + 1
     title = f"{institution.full_name} Items"
     if (page > 1):
         title = (f"{institution.full_name} Items - page {page}")
 
-    rc_ids = [cd[0]['id'] for cd in facets['collection_data']]
+    rc_ids = [cd[0]['id'] for cd in facets['collection_data.keyword']]
     if len(request.GET.getlist('collection_data')):
         rc_ids = request.GET.getlist('collection_data')
 
     num_related_collections = len(rc_ids)
     rcs = get_rc_from_ids(
-        rc_ids, form.rc_page, form.solr_encode().get('q'))
+        rc_ids, form.rc_page, form.query_string)
 
     context = {
         'title': title,
@@ -316,9 +316,7 @@ def institution_collections(request, institution):
 
     collections_params = {
         "query": {
-            "term": {
-                institution.es_filter: institution.id
-            }
+            "terms": institution.es_filter
         },
         "size": 0,
         "aggs": {
@@ -340,21 +338,6 @@ def institution_collections(request, institution):
     sort_collection_data = {c['key']: c['doc_count'] 
                             for c in sort_collection_data}
 
-    # collections_params = {
-    #     'q': '',
-    #     'rows': 0,
-    #     'start': 0,
-    #     'fq': [institution.solr_filter],
-    #     'facet': 'true',
-    #     'facet_mincount': 1,
-    #     'facet_limit': '-1',
-    #     'facet_field': ['sort_collection_data'],
-    #     'facet_sort': 'index'
-    # }
-    # collections_solr_search = SOLR_select(**collections_params)
-    # sort_collection_data = (collections_solr_search.facet_counts
-    #                         ['facet_fields']['sort_collection_data'])
-
     pages = int(math.ceil(len(sort_collection_data) / 10))
 
     # solrpy gives us a dict == unsorted (!)
@@ -363,11 +346,7 @@ def institution_collections(request, institution):
     col_fft = CollectionFF(request)
     solr_related_collections = list(
         collection[0] for collection in
-        col_fft.process_facets(
-            collections_solr_search.facet_counts['facet_fields']
-            ['sort_collection_data'],
-            'value',
-        ))
+        col_fft.process_facets(sort_collection_data, 'value'))
     start = ((page-1) * 10)
     end = page * 10
     solr_related_collections = solr_related_collections[start:end]
@@ -504,36 +483,19 @@ def campus_institutions(request, campus_slug):
                 }
             }
         })
-    institutions_es = institutions_es_search.get('aggregations').get(
+    buckets = institutions_es_search.get('aggregations').get(
         'repository_data').get('buckets')
+
     # make this look like solr, for 'process_facets'
     # TODO: rework, do we need to 'process_facets'? 
-    institutions = {agg.get('key'): agg.get('doc_count') 
-                    for agg in institutions_es}
-
-    # institutions_solr_search = SOLR_select(
-    #     q='',
-    #     rows=0,
-    #     start=0,
-    #     fq=['campus_url: "' + institution.url + '"'],
-    #     facet='true',
-    #     facet_mincount=1,
-    #     facet_limit='-1',
-    #     facet_field=['repository_data'])
-
-    # related_institutions = list(
-    #     institution[0] for institution in
-    #     constants.DEFAULT_FACET_FILTER_TYPES[2].process_facets(
-    #         institutions_solr_search.facet_counts['facet_fields']
-    #         ['repository_data'], []))
+    institutions = {bucket.get('key'): bucket.get('doc_count')
+                    for bucket in buckets}
 
     repo_fft = RepositoryFF(request)
 
     related_institutions = list(
         institution[0] for institution in
-        repo_fft.process_facets(
-            institutions_solr_search.facet_counts['facet_fields']
-            ['repository_data']))
+        repo_fft.process_facets(institutions))
 
     for i, related_institution in enumerate(related_institutions):
         # repo_url = related_institution.split('::')[0]

@@ -146,6 +146,7 @@ class Collection(object):
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
         self.solr_filter = 'collection_url: "' + self.url + '"'
+        self.es_filter = {'collection_ids': [self.id]}
 
     def _parse_custom_facets(self):
         custom_facets = []
@@ -427,8 +428,8 @@ def collection_search(request, collection_id):
     collection = Collection(collection_id)
 
     form = CollectionForm(request, collection)
-    results = form.search()
-    filter_display = form.filter_display()
+    results = form.es_search()
+    filter_display = form.es_filter_display()
 
     if settings.UCLDC_FRONT == 'https://calisphere.org/':
         browse = False
@@ -438,7 +439,7 @@ def collection_search(request, collection_id):
     context = {
         'q': form.q,
         'search_form': form.context(),
-        'facets': form.get_facets(collection.solr_filter),
+        'facets': form.es_get_facets(collection.es_filter),
         'pages': int(math.ceil(results.numFound / int(form.rows))),
         'numFound': results.numFound,
         'search_results': results.results,
