@@ -50,6 +50,7 @@ class FacetFilterType(object):
             selected_filters = request.GET.getlist(self.form_name)
             self.form_context = selected_filters
             self.set_solr_query()
+            self.set_es_query()
 
     def set_solr_query(self):
         selected_filters = self.form_context
@@ -63,10 +64,26 @@ class FacetFilterType(object):
             selected_filters = " OR ".join(selected_filters)
         self.solr_query = selected_filters
 
+    def set_es_query(self):
+        selected_filters = self.form_context
+        self.es_query = {}
+        if len(selected_filters) > 0:
+            self.es_query = {
+                "terms": {
+                    self.es_filter_field: selected_filters
+                }
+            }
+
     def filter_transform(self, filter_val):
         return filter_val
 
+    def es_filter_transform(self, filter_val):
+        return filter_val
+
     def facet_transform(self, facet_val):
+        return facet_val
+
+    def es_facet_transform(self, facet_val):
         return facet_val
 
     def filter_display(self, filter_val):
@@ -109,6 +126,41 @@ class FacetFilterType(object):
 
         return display_facets
 
+    def es_process_facets(self, facets, sort_override=None):
+        filters = list(map(self.es_filter_transform, self.form_context))
+
+        # remove facets with count of zero
+        display_facets = dict(
+            (facet, count) for facet, count in list(
+                facets.items()) if count != 0)
+
+        # sort facets by value of sort_by - either count or value
+        sort_by = sort_override if sort_override else self.sort_by
+        if sort_by == 'value':
+            display_facets = sorted(
+                iter(list(display_facets.items())), key=operator.itemgetter(0))
+        elif sort_by == 'count':
+            display_facets = sorted(
+                iter(list(display_facets.items())),
+                key=operator.itemgetter(1),
+                reverse=True)
+
+        # append selected filters even if they have a count of 0
+        for f in filters:
+            if not any(f in facet[0] for facet in display_facets):
+                if self.form_name == 'collection_data':
+                    collection = self.filter_display(f)
+                    display_facets.append(("{}::{}".format(
+                        collection.get('id'), collection.get('name')), 0))
+                elif self.form_name == 'repository_data':
+                    repository = self.repo_from_id(f)
+                    display_facets.append(("{}::{}".format(
+                        repository.get('id'), repository.get('name')), 0))
+                else:
+                    display_facets.append((f, 0))
+
+        return display_facets
+
     def __str__(self):
         return f'FacetFilterTypeClass: {self.solr_facet_field}'
 
@@ -131,6 +183,9 @@ class TypeFF(FacetFilterType):
     display_name = 'Type of Item'
     solr_filter_field = 'type_ss'
 
+    es_facet_field = 'type.keyword'
+    es_filter_field = 'type.keyword'
+
 
 class DecadeFF(FacetFilterType):
     form_name = 'facet_decade'
@@ -139,6 +194,9 @@ class DecadeFF(FacetFilterType):
     solr_filter_field = 'facet_decade'
     sort_by = 'value'
 
+    es_facet_field = 'date.keyword'
+    es_filter_field = 'date.keyword'
+
 
 class RepositoryFF(FacetFilterType):
     form_name = 'repository_data'
@@ -146,12 +204,19 @@ class RepositoryFF(FacetFilterType):
     display_name = 'Contributing Institution'
     solr_filter_field = 'repository_url'
 
+    es_facet_field = 'repository_data.keyword'
+    es_filter_field = 'repository_ids'
+
     def filter_transform(self, repository_id):
         return repo_template.format(repository_id)
 
     def facet_transform(self, facet_val):
         url = facet_val.split('::')[0]
         repo_id = re.match(repo_regex, url).group('id')
+        return self.repo_from_id(repo_id)
+
+    def es_facet_transform(self, facet_val):
+        repo_id = facet_val.split('::')[0]
         return self.repo_from_id(repo_id)
 
     def filter_display(self, filter_val):
@@ -190,6 +255,9 @@ class CollectionFF(FacetFilterType):
     display_name = 'Collection'
     solr_filter_field = 'collection_url'
 
+    es_facet_field = 'collection_data.keyword'
+    es_filter_field = 'collection_ids'
+
     def filter_transform(self, collection_id):
         return col_template.format(collection_id)
 
@@ -206,6 +274,15 @@ class CollectionFF(FacetFilterType):
         else:
             collection['id'] = collection_api_url.group('id')
 
+        return collection
+
+    def es_facet_transform(self, collection_data):
+        parts = collection_data.split('::')
+        collection = {
+            'url': col_template.format(parts[0]),
+            'id': parts[0],
+            'name': parts[1]
+        }
         return collection
 
     def filter_display(self, collection_id):

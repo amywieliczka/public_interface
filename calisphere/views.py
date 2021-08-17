@@ -267,17 +267,18 @@ def item_view(request, item_id=''):
 def search(request):
     if request.method == 'GET' and len(request.GET.getlist('q')) > 0:
         form = SearchForm(request)
-        results = form.search()
-        facets = form.get_facets()
-        filter_display = form.filter_display()
+        results = form.es_search()
+        facets = form.es_get_facets()
+        filter_display = form.es_filter_display()
 
-        rc_ids = [cd[0]['id'] for cd in facets['collection_data']]
+        # rc_ids = [cd[0]['id'] for cd in facets['collection_data']]
+        rc_ids = [cd[0]['id'] for cd in facets['collection_data.keyword']]
         if len(request.GET.getlist('collection_data')):
             rc_ids = request.GET.getlist('collection_data')
 
         num_related_collections = len(rc_ids)
         related_collections = get_rc_from_ids(
-            rc_ids, form.rc_page, form.solr_encode().get('q'))
+            rc_ids, form.rc_page, form.query_string)
 
         context = {
             'facets': facets,

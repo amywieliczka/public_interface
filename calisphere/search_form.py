@@ -3,10 +3,15 @@ from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
 import json
+from collections import namedtuple
 
 
 def solr_escape(text):
     return text.replace('?', '\\?').replace('"', '\\"')
+
+
+ESResults = namedtuple(
+    'ESResults', 'results numFound facet_counts')
 
 
 class SortField(object):
@@ -57,13 +62,14 @@ class SearchForm(object):
 
         self.sort = self.sort_field(request).sort
         self.solr_query = self.solr_encode()
+        self.es_query = self.es_encode()
 
     def context(self):
         fft = [{
             'form_name': f.form_name,
-            'facet': f.solr_facet_field,
+            'facet': f.es_facet_field,
             'display_name': f.display_name,
-            'filter': f.solr_filter_field,
+            'filter': f.es_filter_field,
             'faceting_allowed': f.faceting_allowed
         } for f in self.facet_filter_types]
 
@@ -86,20 +92,17 @@ class SearchForm(object):
             self.request.getlist('fq')
         )
         terms = [q for q in terms if q]
-        qt_string = terms[0] if len(terms) == 1 else " AND ".join(terms)
+        self.query_string = (
+            terms[0] if len(terms) == 1 else " AND ".join(terms))
 
         es_query_string = {
             "query_string": {
-                "query": qt_string
+                "query": self.query_string
             }
         }
 
-        es_query_filters = {
-            "bool": {
-                "should": [ft.es_query for ft in self.facet_filter_types
-                           if ft.es_query]
-            }
-        }
+        es_query_filters = [ft.es_query for ft in self.facet_filter_types
+                            if ft.es_query]
 
         try:
             rows = int(self.rows)
@@ -108,7 +111,7 @@ class SearchForm(object):
             raise Http404("{0} does not exist".format(err))
 
         sort = constants.SORT_OPTIONS[self.sort]
-        print(sort)
+        print(f'TODO: set sort for ES: {sort}')
 
         if len(facet_types) == 0:
             facet_types = self.facet_filter_types
@@ -127,7 +130,7 @@ class SearchForm(object):
             "query": {
                 "bool": {
                     "must": [es_query_string],
-                    "filter": [es_query_filters]
+                    "filter": es_query_filters
                 }
             },
             "size": rows,
@@ -219,21 +222,21 @@ class SearchForm(object):
                 facet_search = elastic_client.search(
                     index="calisphere-items", body=es_params)
 
-                values = facet_search.get('aggregations').get(
-                    fft.es_facet_field)
+                # make it look like solr
+                buckets = (
+                    facet_search
+                    .get('aggregations')
+                    .get(fft.es_facet_field)
+                    .get('buckets')
+                )
+                self.es_facets[fft.es_facet_field] = {
+                    b['key']: b['doc_count'] for b in buckets}
 
-            else:
-                values = self.facets.get(fft.es_facet_field)
+            es_facets = self.es_facets[fft.es_facet_field]
 
-            # make it look like solr
-            self.facets[fft.es_facet_field] = {
-                v['key']: v['doc_count'] for v in values.get('buckets')}
+            facets[fft.es_facet_field] = fft.es_process_facets(es_facets)
 
-            es_facets = self.facets[fft.es_facet_field]
-
-            facets[fft.es_facet_field] = fft.process_facets(es_facets)
-
-            for j, facet_item in enumerate(facets[fft.form_name]):
+            for j, facet_item in enumerate(facets[fft.es_facet_field]):
                 facets[fft.es_facet_field][j] = (fft.es_facet_transform(
                     facet_item[0]), facet_item[1])
 
@@ -277,7 +280,7 @@ class SearchForm(object):
 
     def es_search(self, extra_filter=None):
         # solr_query = self.solr_encode()
-        es_query = self.es_encode()
+        es_query = self.es_query
 
         if extra_filter:
             (es_query.get('query')
@@ -293,8 +296,22 @@ class SearchForm(object):
 
         results = elastic_client.search(
             index="calisphere-items", body=es_query)
-        self.facets = results.get('aggregations')
-        return results
+
+        aggs = results.get('aggregations')
+        facet_counts = {'facet_fields': {}}
+        for facet_field in aggs:
+            buckets = aggs[facet_field].get('buckets')
+            facet_values = {b['key']: b['doc_count'] for b in buckets}
+            facet_counts['facet_fields'][facet_field] = facet_values
+
+        es_results = ESResults(
+            results['hits']['hits'],
+            results['hits']['total']['value'],
+            facet_counts)
+
+        self.es_facets = facet_counts['facet_fields']
+        self.search()
+        return es_results
 
     def search(self, extra_filter=None):
         solr_query = self.solr_query
@@ -307,7 +324,7 @@ class SearchForm(object):
     def es_filter_display(self):
         filter_display = {}
         for filter_type in self.facet_filter_types:
-            param_name = filter_type['es_facet_field']
+            param_name = filter_type['form_name']
             display_name = filter_type['es_filter_field']
             filter_transform = filter_type['filter_display']
 
