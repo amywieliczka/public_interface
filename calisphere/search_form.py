@@ -1,16 +1,11 @@
-from .cache_retry import elastic_client
+from .cache_retry import ES_search
 from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
-from collections import namedtuple
 
 
 def solr_escape(text):
     return text.replace('?', '\\?').replace('"', '\\"')
-
-
-ESResults = namedtuple(
-    'ESResults', 'results numFound facet_counts')
 
 
 class SortField(object):
@@ -172,18 +167,10 @@ class SearchForm(object):
                             "terms": extra_filter
                         }))
 
-                facet_search = elastic_client.search(
-                    index="calisphere-items", body=es_params)
+                facet_search = ES_search(es_params)
 
-                # make it look like solr
-                buckets = (
-                    facet_search
-                    .get('aggregations')
-                    .get(fft.es_facet_field)
-                    .get('buckets')
-                )
-                self.es_facets[fft.es_facet_field] = {
-                    b['key']: b['doc_count'] for b in buckets}
+                self.es_facets[fft.es_facet_field] = facet_search.facet_counts[
+                    'facet_fields'][fft.es_facet_field]
 
             es_facets = self.es_facets[fft.es_facet_field]
 
@@ -206,23 +193,10 @@ class SearchForm(object):
                     "terms": extra_filter
                 }))
 
-        results = elastic_client.search(
-            index="calisphere-items", body=es_query)
+        results = ES_search(es_query)
 
-        aggs = results.get('aggregations')
-        facet_counts = {'facet_fields': {}}
-        for facet_field in aggs:
-            buckets = aggs[facet_field].get('buckets')
-            facet_values = {b['key']: b['doc_count'] for b in buckets}
-            facet_counts['facet_fields'][facet_field] = facet_values
-
-        es_results = ESResults(
-            results['hits']['hits'],
-            results['hits']['total']['value'],
-            facet_counts)
-
-        self.es_facets = facet_counts['facet_fields']
-        return es_results
+        self.es_facets = results.facet_counts['facet_fields']
+        return results
 
     def filter_display(self):
         filter_display = {}

@@ -8,7 +8,7 @@ import urllib.request, urllib.error, urllib.parse
 from collections import namedtuple
 import string
 import random
-from .cache_retry import json_loads_url, elastic_client
+from .cache_retry import json_loads_url, ES_search
 from django.core.cache import cache
 from django.conf import settings
 import time
@@ -44,31 +44,18 @@ class CollectionManager(object):
                     }
                 }
             }
-            es_data = elastic_client.search(
-                index="calisphere-items", body=es_query)
-            collections = es_data.get('aggregations').get('collection_data').get(
-                'buckets')
-            collections = [c['key'] for c in collections]
 
-            # url = (
-            #     '{0}/query?facet.field=collection_data&facet=on&rows=0&facet.limit=-1&facet.mincount=1'
-            #     .format(solr_url))
-            # req = urllib.request.Request(url, None,
-            #                              {'X-Authentication-Token': solr_key})
             save = {}
-            # solr_data = json_loads_url(req)
-            # save['data'] = self.data = solr_data['facet_counts'][
-            #     'facet_fields']['collection_data'][::2]
-            save['data'] = self.data = collections
+            es_data = ES_search(es_query)
+            save['data'] = self.data = list(es_data.facet_counts[
+                'facet_fields']['collection_data'].keys())
             self.parse()
             save['parsed'] = self.parsed
             save['names'] = self.names
             save['split'] = self.split
             save['no_collections'] = self.no_collections
             save['shuffled'] = self.shuffled
-            # save['total_objects'] = self.total_objects = solr_data['response'][
-            #     'numFound']
-            save['total_objects'] = es_data.get('hits').get('total').get('value')
+            save['total_objects'] = es_data.numFound
             cache.set(cache_key, save, settings.DJANGO_CACHE_TIMEOUT)
 
     def parse(self):

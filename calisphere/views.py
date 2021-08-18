@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
-from .cache_retry import SOLR_raw, json_loads_url, elastic_client
+from .cache_retry import SOLR_raw, json_loads_url, elastic_client, ES_search
 from .search_form import SearchForm, solr_escape, CollectionFacetValueForm
 from .collection_views import Collection, get_rc_from_ids
 from .institution_views import Repository
@@ -114,17 +114,16 @@ def item_view(request, item_id=''):
         def _fixid(id):
             return re.sub(r'^(\d*--http:/)(?!/)', r'\1/', id)
 
-        old_id_search = elastic_client.search(
-            index="calisphere-items", body={
+        old_id_search = ES_search({
                 "query": {
                     "query_string": {
                         "query": f"harvest_id_s:*{_fixid(item_id)}"
                     }
                 }
             })
-        if old_id_search['hits']['total']['value']:
+        if old_id_search.numFound:
             return redirect('calisphere:itemView',
-                            old_id_search['hits']['hits'][0]['_id'])
+                            old_id_search.results[0]['_id'])
         else:
             raise Http404("{0} does not exist".format(item_id))
 
@@ -385,8 +384,7 @@ def item_view_carousel(request):
             es_params['from'] = 0
 
         try:
-            carousel_es_search = elastic_client.search(
-                index="calisphere-items", body=es_params)
+            carousel_es_search = ES_search(es_params)
         except HTTPError as e:
             # https://stackoverflow.com/a/19384641/1763984
             print((request.get_full_path()))
@@ -470,14 +468,9 @@ def get_related_collections(request, slug=None, repository_id=None):
                     }]
                 }))
 
-    related_collections = elastic_client.search(
-        index="calisphere-items", body=es_params)
-
-    buckets = (related_collections
-               .get('aggregations')
-               .get('collection_data.keyword')
-               .get('buckets'))
-    related_collections = {b['key']: b['doc_count'] for b in buckets}
+    related_collections = ES_search(es_params)
+    related_collections = related_collections.facet_counts['facet_fields'][
+        'collection_data.keyword']
 
     # remove collections with a count of 0 and sort by count
     related_collections = field.es_process_facets(related_collections)
@@ -574,10 +567,8 @@ def report_collection_facet(request, collection_id, facet):
     }
     # regarding 'size' parameter here and getting back all the facet values
     # please see: https://github.com/elastic/elasticsearch/issues/18838
-    es_search = elastic_client.search(
-        index="calisphere-items", body=es_params)
-    buckets = es_search['aggregations'][facet]['buckets']
-    values = {b['key']: b['doc_count'] for b in buckets}
+    es_search = ES_search(es_params)
+    values = es_search.facet_counts['facet_fields'][facet]
     if not values:
         raise Http404("{0} has no values".format(facet))
     unique = len(values)
@@ -626,10 +617,9 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
             }]
         })
 
-    es_search = elastic_client(
-        index="calisphere-items", body=es_params)
-    results = es_search['hits']['hits']
-    num_found = es_search['hits']['total']['value']
+    es_search = ES_search(es_params)
+    results = es_search.results
+    num_found = es_search.numFound
 
     collection_name = collection_details.get('name')
 

@@ -6,7 +6,7 @@ from django.http import Http404, JsonResponse
 from calisphere.collection_data import CollectionManager
 from . import constants
 from .facet_filter_type import FacetFilterType
-from .cache_retry import json_loads_url, elastic_client
+from .cache_retry import json_loads_url, ES_search
 from .search_form import CollectionForm, solr_escape
 from builtins import range
 
@@ -32,7 +32,6 @@ def collections_directory(request):
 
     for collection_link in solr_collections.shuffled[(page - 1) * 10:page *
                                                      10]:
-        # col_id = re.match(col_regex, collection_link.url).group('id')
         col_id = collection_link.url
         try:
             collections.append(Collection(col_id).get_mosaic())
@@ -69,7 +68,6 @@ def collections_az(request, collection_letter):
 
     collections = []
     for collection_link in collections_list[(page - 1) * 10:page * 10]:
-        # col_id = re.match(col_regex, collection_link.url).group('id')
         col_id = collection_link.url
         try:
             collections.append(Collection(col_id).get_mosaic())
@@ -101,20 +99,17 @@ def collections_az(request, collection_letter):
 def collections_titles(request):
     '''create JSON/data for the collections search page'''
 
-    def djangoize(uri):
+    def djangoize(id):
         '''turn registry URI into URL on django site'''
-        # collection_id = uri.split(
-        #     'https://registry.cdlib.org/api/v1/collection/', 1)[1][:-1]
-        collection_id = uri
         return reverse(
             'calisphere:collectionView',
-            kwargs={'collection_id': collection_id})
+            kwargs={'collection_id': id})
 
     collections = CollectionManager(settings.SOLR_URL, settings.SOLR_API_KEY)
     data = [{
-        'uri': djangoize(uri),
+        'uri': djangoize(id),
         'title': title
-    } for (uri, title) in collections.parsed]
+    } for (id, title) in collections.parsed]
     return JsonResponse(data, safe=False)
 
 
@@ -144,7 +139,6 @@ class Collection(object):
         self.custom_facets = self._parse_custom_facets()
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
-        self.solr_filter = 'collection_url: "' + self.url + '"'
         self.es_filter = {'collection_ids': [self.id]}
 
     def _parse_custom_facets(self):
@@ -204,9 +198,8 @@ class Collection(object):
             },
             "size": 0
         }
-        es_search = elastic_client.search(
-            index="calisphere-items", body=es_params)
-        self.item_count = es_search.get('hits').get('total').get('value')
+        es_search = ES_search(es_params)
+        self.item_count = es_search.numFound
         return self.item_count
 
     def _choose_facet_sets(self, facet_set):
@@ -260,19 +253,13 @@ class Collection(object):
             }
         # regarding 'size' parameter here and getting back all the facet values
         # please see: https://github.com/elastic/elasticsearch/issues/18838
-        es_search = elastic_client.search(
-            index="calisphere-items", body=es_params)
-        self.item_count = es_search.get('hits').get('total').get('value')
-        # print(es_search.get('aggregations'))
+        es_search = ES_search(es_params)
+        self.item_count = es_search.numFound
         
         facets = []
         for facet_field in facet_fields:
-            values = es_search.get('aggregations').get(facet_field.facet).get(
-                'buckets')
-            # make it look like solr
-            values = {v['key']: v['doc_count'] for v in values}
-            # values = solr_search.facet_counts.get('facet_fields').get(
-            #     '{}_ss'.format(facet_field.facet))
+            values = es_search.facet_counts.get('facet_fields').get(
+                facet_field.facet)
             if not values:
                 facets.append(None)
 
@@ -305,7 +292,8 @@ class Collection(object):
             else:
                 repositories.append(repository['name'])
 
-        es_search_terms = {
+        # get 6 image items from the collection for the mosaic preview
+        search_terms = {
             "query": {
                 "bool": {
                     "filter": [
@@ -329,26 +317,22 @@ class Collection(object):
             "from": 0
         }
 
-        display_items = elastic_client.search(
-            index="calisphere-items", body=es_search_terms)
-        items = display_items['hits']['hits']
+        display_items = ES_search(search_terms)
+        items = display_items.results
 
-        es_search_terms['query']['bool']['filter'].pop(1)
-        es_search_terms['query']['bool']['must_not'] = [{
+        search_terms['query']['bool']['filter'].pop(1)
+        search_terms['query']['bool']['must_not'] = [{
             "terms": {"type.keyword": ["image"]}
         }]
 
-        ugly_display_items = elastic_client.search(
-            index="calisphere-items", body=es_search_terms)
+        ugly_display_items = ES_search(search_terms)
 
         # if there's not enough image items, get some non-image
         # items for the mosaic preview
         if len(items) < 6:
-            items = items + ugly_display_items['hits']['hits']
+            items = items + ugly_display_items.results
 
-        num_found = (
-            display_items['hits']['total']['value'] + 
-            ugly_display_items['hits']['total']['value'])
+        num_found = display_items.numFound + ugly_display_items.numFound
 
         return {
             'name': self.details['name'],
@@ -393,17 +377,14 @@ class Collection(object):
             }
             rc_es_params['query']['bool'].update(es_query_string)
 
-        collection_items = elastic_client.search(
-            index="calisphere-items", body=rc_es_params)
-        collection_items = collection_items['hits']['hits']
+        collection_items = ES_search(rc_es_params)
+        collection_items = collection_items.results
 
         if len(collection_items) < 3:
             # redo the query without any search terms
             rc_es_params['query']['bool'].pop('must')
-            collection_items_no_query = elastic_client.search(
-                index="calisphere-items", body=rc_es_params)
-            collection_items = (
-                collection_items + collection_items_no_query['hits']['hits'])
+            collection_items_no_query = ES_search(rc_es_params)
+            collection_items += collection_items_no_query.results
 
         if len(collection_items) <= 0:
             # throw error
@@ -531,9 +512,8 @@ def collection_facet(request, collection_id, facet):
                 "_source": ["reference_image_md5, type_ss"],
                 "size": 3
             }
-            es_thumbs = elastic_client.search(
-                index="calisphere-items", body=es_thumb_params)
-            value['thumbnails'] = es_thumbs['hits']['hits']
+            es_thumbs = ES_search(es_thumb_params)
+            value['thumbnails'] = es_thumbs.results
 
         context.update({
             'page_info':
@@ -667,9 +647,8 @@ def get_cluster_thumbnails(collection_id, facet, facet_value):
         "_source": ['reference_image_md5', 'type'],
         "size": 3
     }
-    es_thumbs = elastic_client.search(
-        index="calisphere-items", body=es_thumb_params)
-    return es_thumbs['hits']['hits']
+    es_thumbs = ES_search(es_thumb_params)
+    return es_thumbs.results
 
 # average 'best case': http://127.0.0.1:8000/collections/27433/browse/
 # long rights statement: http://127.0.0.1:8000/collections/26241/browse/

@@ -29,6 +29,31 @@ elastic_client = Elasticsearch(
     hosts=[settings.ES_HOST],
     http_auth=(settings.ES_USER, settings.ES_PASS))
 
+ESResults = namedtuple(
+    'ESResults', 'results numFound facet_counts')
+
+
+def ES_search(body):
+    results = elastic_client.search(
+        index="calisphere-items", body=body)
+
+    aggs = results.get('aggregations')
+    facet_counts = {'facet_fields': {}}
+    if aggs:
+        for facet_field in aggs:
+            buckets = aggs[facet_field].get('buckets')
+            facet_values = {b['key']: b['doc_count'] for b in buckets}
+            facet_counts['facet_fields'][facet_field] = facet_values
+    else:
+        facet_counts = {}
+
+    results = ESResults(
+        results['hits']['hits'],
+        results['hits']['total']['value'],
+        facet_counts)
+
+    return results
+
 
 SOLR_DEFAULTS = {
     'mm': '100%',
