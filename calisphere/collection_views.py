@@ -150,10 +150,10 @@ class Collection(object):
                         None,
                         type={
                             'form_name': custom_facet['facet_field'],
-                            'es_facet_field': (
+                            'facet_field': (
                                 f"{custom_facet['facet_field'][:-3]}.keyword"),
                             'display_name': custom_facet['label'],
-                            'es_filter_field': (
+                            'filter_field': (
                                 f"{custom_facet['facet_field'][:-3]}.keyword"),
                             'sort_by': 'count',
                             'faceting_allowed': True
@@ -168,7 +168,7 @@ class Collection(object):
         if self.custom_facets:
             for custom in self.custom_facets:
                 for i, facet in enumerate(custom_schema_facets):
-                    if custom.es_facet_field == f"{facet.facet}.keyword":
+                    if custom.facet_field == f"{facet.facet}.keyword":
                         custom_schema_facets[i] = constants.FacetDisplay(
                             facet.facet, custom.display_name)
         return custom_schema_facets

@@ -59,9 +59,9 @@ class SearchForm(object):
     def context(self):
         fft = [{
             'form_name': f.form_name,
-            'facet': f.es_facet_field,
+            'facet': f.facet_field,
             'display_name': f.display_name,
-            'filter': f.es_filter_field,
+            'filter': f.filter_field,
             'faceting_allowed': f.faceting_allowed
         } for f in self.facet_filter_types]
 
@@ -115,9 +115,9 @@ class SearchForm(object):
         aggs = {}
         for facet_type in facet_types:
             aggs.update({
-                facet_type.es_facet_field: {
+                facet_type.facet_field: {
                     "terms": {
-                        "field": facet_type.es_facet_field
+                        "field": facet_type.facet_field
                     }
                 }
             })
@@ -169,15 +169,15 @@ class SearchForm(object):
 
                 facet_search = ES_search(es_params)
 
-                self.es_facets[fft.es_facet_field] = facet_search.facet_counts[
-                    'facet_fields'][fft.es_facet_field]
+                self.es_facets[fft.facet_field] = facet_search.facet_counts[
+                    'facet_fields'][fft.facet_field]
 
-            es_facets = self.es_facets[fft.es_facet_field]
+            es_facets = self.es_facets[fft.facet_field]
 
-            facets[fft.es_facet_field] = fft.es_process_facets(es_facets)
+            facets[fft.facet_field] = fft.es_process_facets(es_facets)
 
-            for j, facet_item in enumerate(facets[fft.es_facet_field]):
-                facets[fft.es_facet_field][j] = (fft.es_facet_transform(
+            for j, facet_item in enumerate(facets[fft.facet_field]):
+                facets[fft.facet_field][j] = (fft.es_facet_transform(
                     facet_item[0]), facet_item[1])
 
         return facets
@@ -202,7 +202,7 @@ class SearchForm(object):
         filter_display = {}
         for filter_type in self.facet_filter_types:
             param_name = filter_type['form_name']
-            display_name = filter_type['es_filter_field']
+            display_name = filter_type['filter_field']
             filter_transform = filter_type['filter_display']
 
             if len(self.request.getlist(param_name)) > 0:
