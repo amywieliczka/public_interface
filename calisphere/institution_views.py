@@ -40,7 +40,7 @@ def process_sort_collection_data(string):
 
 def campus_directory(request):
 
-    repo_es_query_2 = ES_search({
+    repositories_query = ES_search({
             "size": 0,
             "aggs": {
                 "repository_ids": {
@@ -50,11 +50,11 @@ def campus_directory(request):
                 }
             }
         })
-    es_repositories = list(repo_es_query_2.facet_counts['facet_fields'][
+    index_repositories = list(repositories_query.facet_counts['facet_fields'][
         'repository_ids'].keys())
 
     repositories = []
-    for repo_id in es_repositories:
+    for repo_id in index_repositories:
         repository = Repository(repo_id).get_repo_data()
         if repository['campus']:
             repositories.append({
@@ -80,7 +80,7 @@ def campus_directory(request):
 
 
 def statewide_directory(request):
-    repositories_es_query = ES_search({
+    repositories_query = ES_search({
             "size": 0,
             "aggs": {
                 "repository_id": {
@@ -90,11 +90,11 @@ def statewide_directory(request):
                 }
             }
         })
-    es_repositories = list(repositories_es_query.facet_counts['facet_fields'][
+    index_repositories = list(repositories_query.facet_counts['facet_fields'][
         'repository_id'].keys())
 
     repositories = []
-    for repo_id in es_repositories:
+    for repo_id in index_repositories:
         repository = Repository(repo_id).get_repo_data()
         if repository['campus'] == '':
             repositories.append({
@@ -288,8 +288,8 @@ def institution_collections(request, institution):
             }
         }
     }
-    collections_es_search = ES_search(collections_params)
-    sort_collection_data = collections_es_search.facet_counts['facet_fields'][
+    collections_search = ES_search(collections_params)
+    sort_collection_data = collections_search.facet_counts['facet_fields'][
         'collection_data']
 
     pages = int(math.ceil(len(sort_collection_data) / 10))
@@ -419,7 +419,7 @@ def campus_collections(request, campus_slug):
 def campus_institutions(request, campus_slug):
     institution = Campus(campus_slug)
 
-    institutions_es_search = ES_search({
+    institutions_search = ES_search({
             "query": {
                 "term": {
                     "campus_ids": institution.id
@@ -434,7 +434,7 @@ def campus_institutions(request, campus_slug):
                 }
             }
         })
-    institutions = institutions_es_search.facet_counts['facet_fields'][
+    institutions = institutions_search.facet_counts['facet_fields'][
         'repository_data']
 
     repo_fft = RepositoryFF(request)
