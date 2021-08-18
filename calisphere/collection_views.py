@@ -200,8 +200,8 @@ class Collection(object):
             },
             "size": 0
         }
-        es_search = ES_search(es_params)
-        self.item_count = es_search.numFound
+        item_count_search = ES_search(es_params)
+        self.item_count = item_count_search.numFound
         return self.item_count
 
     def _choose_facet_sets(self, facet_set):
@@ -255,12 +255,12 @@ class Collection(object):
             }
         # regarding 'size' parameter here and getting back all the facet values
         # please see: https://github.com/elastic/elasticsearch/issues/18838
-        es_search = ES_search(es_params)
-        self.item_count = es_search.numFound
+        facet_search = ES_search(es_params)
+        self.item_count = facet_search.numFound
         
         facets = []
         for facet_field in facet_fields:
-            values = es_search.facet_counts.get('facet_fields').get(
+            values = facet_search.facet_counts.get('facet_fields').get(
                 facet_field.facet)
             if not values:
                 facets.append(None)
@@ -344,7 +344,7 @@ class Collection(object):
         }
 
     def get_lockup(self, keyword_query):
-        rc_es_params = {
+        rc_params = {
             "query": {
                 "bool": {
                     "filter": [
@@ -375,15 +375,15 @@ class Collection(object):
                     }
                 }]
             }
-            rc_es_params['query']['bool'].update(es_query_string)
+            rc_params['query']['bool'].update(es_query_string)
 
-        collection_items = ES_search(rc_es_params)
+        collection_items = ES_search(rc_params)
         collection_items = collection_items.results
 
         if len(collection_items) < 3:
             # redo the query without any search terms
-            rc_es_params['query']['bool'].pop('must')
-            collection_items_no_query = ES_search(rc_es_params)
+            rc_params['query']['bool'].pop('must')
+            collection_items_no_query = ES_search(rc_params)
             collection_items += collection_items_no_query.results
 
         if len(collection_items) <= 0:
@@ -500,7 +500,7 @@ def collection_facet(request, collection_id, facet):
         values = values[start:end]
         for value in values:
             escaped_cluster_value = solr_escape(value['label'])
-            es_thumb_params = {
+            thumb_params = {
                 "query": {
                     "bool": {
                         "filter": [
@@ -512,8 +512,8 @@ def collection_facet(request, collection_id, facet):
                 "_source": ["reference_image_md5, type_ss"],
                 "size": 3
             }
-            es_thumbs = ES_search(es_thumb_params)
-            value['thumbnails'] = es_thumbs.results
+            thumbs = ES_search(thumb_params)
+            value['thumbnails'] = thumbs.results
 
         context.update({
             'page_info':
@@ -633,7 +633,7 @@ def collection_metadata(request, collection_id):
 
 def get_cluster_thumbnails(collection_id, facet, facet_value):
     escaped_cluster_value = solr_escape(facet_value)
-    es_thumb_params = {
+    thumb_params = {
         "query": {
             "bool": {
                 "filter": [
@@ -647,8 +647,8 @@ def get_cluster_thumbnails(collection_id, facet, facet_value):
         "_source": ['reference_image_md5', 'type'],
         "size": 3
     }
-    es_thumbs = ES_search(es_thumb_params)
-    return es_thumbs.results
+    thumbs = ES_search(thumb_params)
+    return thumbs.results
 
 # average 'best case': http://127.0.0.1:8000/collections/27433/browse/
 # long rights statement: http://127.0.0.1:8000/collections/26241/browse/
