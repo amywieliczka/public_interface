@@ -104,12 +104,12 @@ def item_view(request, item_id=''):
     from_item_page = request.META.get("HTTP_X_FROM_ITEM_PAGE")
 
     item_id_search_term = 'id:"{0}"'.format(item_id)
-    item_es_search = elastic_client.get(
+    item_search = elastic_client.get(
         index="calisphere-items", id=item_id)
     
     order = request.GET.get('order')
 
-    if not item_es_search['found']:
+    if not item_search['found']:
         # second level search
         def _fixid(id):
             return re.sub(r'^(\d*--http:/)(?!/)', r'\1/', id)
@@ -127,7 +127,7 @@ def item_view(request, item_id=''):
         else:
             raise Http404("{0} does not exist".format(item_id))
 
-    item = item_es_search['_source']
+    item = item_search['_source']
     if 'reference_image_dimensions' in item:
         split_ref = item['reference_image_dimensions'].split(':')
         item['reference_image_dimensions'] = split_ref
@@ -244,7 +244,7 @@ def item_view(request, item_id=''):
     context = {
         'q': '',
         'item': search_results,
-        'item_solr_search': item_es_search,
+        'item_solr_search': item_search,
         'meta_image': meta_image,
         'repository_id': None,
         'itemId': None,
@@ -258,7 +258,7 @@ def item_view(request, item_id=''):
         context = {
             'q': '',
             'item': search_results,
-            'item_solr_search': item_es_search,
+            'item_solr_search': item_search,
             'meta_image': meta_image,
             'rc_page': None,
             'related_collections': related_collections,
@@ -281,7 +281,6 @@ def search(request):
         facets = form.get_facets()
         filter_display = form.filter_display()
 
-        # rc_ids = [cd[0]['id'] for cd in facets['collection_data']]
         rc_ids = [cd[0]['id'] for cd in facets['collection_data.keyword']]
         if len(request.GET.getlist('collection_data')):
             rc_ids = request.GET.getlist('collection_data')
@@ -359,9 +358,9 @@ def item_view_carousel(request):
                       if c['slug'] == link_back_id][0]
             extra_filter = {'campus_ids': [campus['id']]}
 
-    es_params = form.query_encode()
+    carousel_params = form.query_encode()
     if extra_filter:
-        (es_params.get('query')
+        (carousel_params.get('query')
             .get('bool')
             .get('filter')
             .append({
@@ -370,32 +369,32 @@ def item_view_carousel(request):
 
     # if no query string or filters, do a "more like this" search
     if form.query_string == '' and len(
-      es_params['query']['bool']['filter']) == 0:
+      carousel_params['query']['bool']['filter']) == 0:
         search_results, num_found = item_view_carousel_mlt(item_id)
     else:
-        es_params.pop('aggs')
-        es_params['_source'] = [
+        carousel_params.pop('aggs')
+        carousel_params['_source'] = [
             'calisphere-id',
             'type',
             'reference_image_md5',
             'title'
         ]
-        if es_params.get('from') == 'NaN':
-            es_params['from'] = 0
+        if carousel_params.get('from') == 'NaN':
+            carousel_params['from'] = 0
 
         try:
-            carousel_es_search = ES_search(es_params)
+            carousel_search = ES_search(carousel_params)
         except HTTPError as e:
             # https://stackoverflow.com/a/19384641/1763984
             print((request.get_full_path()))
             raise (e)
-        search_results = carousel_es_search.results
-        num_found = carousel_es_search.numFound
+        search_results = carousel_search.results
+        num_found = carousel_search.numFound
 
     if request.GET.get('init'):
         context = form.context()
-        context['start'] = es_params[
-            'from'] if es_params['from'] != 'NaN' else 0
+        context['start'] = carousel_params[
+            'from'] if carousel_params['from'] != 'NaN' else 0
         context['filters'] = form.filter_display()
 
         context.update({
@@ -427,15 +426,15 @@ def get_related_collections(request, slug=None, repository_id=None):
     form = SearchForm(request)
     field = CollectionFF(request)
 
-    es_params = form.query_encode([field])
-    es_params['size'] = 0
+    rc_params = form.query_encode([field])
+    rc_params['size'] = 0
 
     if request.GET.get('campus_slug'):
         slug = request.GET.get('campus_slug')
 
     if slug:
         campus = [c for c in constants.CAMPUS_LIST if c['slug'] == slug][0]
-        (es_params.get('query')
+        (rc_params.get('query')
             .get('bool')
             .get('filter')
             .append({
@@ -444,7 +443,7 @@ def get_related_collections(request, slug=None, repository_id=None):
                 }
             }))
     if repository_id:
-        (es_params.get('query')
+        (rc_params.get('query')
             .get('bool')
             .get('filter')
             .append({
@@ -455,9 +454,9 @@ def get_related_collections(request, slug=None, repository_id=None):
 
     # mlt search (TODO, need to actually make MLT?)
     if len(form.query_string) == 0 and len(
-      es_params['query']['bool']['filter']) == 0:
+      rc_params['query']['bool']['filter']) == 0:
         if request.GET.get('itemId'):
-            (es_params.get('query')
+            (rc_params.get('query')
                 .get('bool')
                 .update({
                     "must": [{
@@ -468,7 +467,7 @@ def get_related_collections(request, slug=None, repository_id=None):
                     }]
                 }))
 
-    related_collections = ES_search(es_params)
+    related_collections = ES_search(rc_params)
     related_collections = related_collections.facet_counts['facet_fields'][
         'collection_data.keyword']
 
