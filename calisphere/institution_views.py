@@ -39,7 +39,6 @@ def process_sort_collection_data(string):
 
 
 def campus_directory(request):
-
     repositories_query = ES_search({
             "size": 0,
             "aggs": {
@@ -298,15 +297,15 @@ def institution_collections(request, institution):
     # use the `facet_decade` mode of process_facets to do a
     # lexical sort by value ....
     col_fft = CollectionFF(request)
-    solr_related_collections = list(
+    related_collections = list(
         collection[0] for collection in
         col_fft.process_facets(sort_collection_data, 'value'))
     start = ((page-1) * 10)
     end = page * 10
-    solr_related_collections = solr_related_collections[start:end]
+    related_collections = related_collections[start:end]
 
     related_collections = []
-    for i, related_collection in enumerate(solr_related_collections):
+    for i, related_collection in enumerate(related_collections):
         collection_parts = process_sort_collection_data(
             related_collection)
         col_id = collection_parts[0]
@@ -444,8 +443,6 @@ def campus_institutions(request, campus_slug):
         repo_fft.process_facets(institutions))
 
     for i, related_institution in enumerate(related_institutions):
-        # repo_url = related_institution.split('::')[0]
-        # repo_id = re.match(repo_regex, repo_url).group('repository_id')
         repo_id = related_institution.split('::')[0]
         related_institutions[i] = Repository(repo_id).get_repo_data()
     related_institutions = sorted(
