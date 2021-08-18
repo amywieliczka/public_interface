@@ -78,6 +78,7 @@ class SearchForm(object):
         return search_form
 
     def query_encode(self, facet_types=[]):
+        # concatenate query terms from refine query and query box
         terms = (
             [solr_escape(self.q)] +
             [solr_escape(q) for q in self.rq] +
@@ -86,6 +87,7 @@ class SearchForm(object):
         terms = [q for q in terms if q]
         self.query_string = (
             terms[0] if len(terms) == 1 else " AND ".join(terms))
+        # qt_string = qt_string.replace('?', '')
 
         es_query_string = {
             "must": [{
@@ -185,7 +187,6 @@ class SearchForm(object):
 
     def search(self, extra_filter=None):
         query = self.query_encode()
-
         if extra_filter:
             (query.get('query')
                 .get('bool')
