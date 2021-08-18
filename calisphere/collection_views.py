@@ -6,7 +6,7 @@ from django.http import Http404, JsonResponse
 from calisphere.collection_data import CollectionManager
 from . import constants
 from .facet_filter_type import FacetFilterType
-from .cache_retry import SOLR_select, json_loads_url, elastic_client
+from .cache_retry import json_loads_url, elastic_client
 from .search_form import CollectionForm, solr_escape
 from builtins import range
 
@@ -14,7 +14,6 @@ import os
 import math
 import string
 import urllib.parse
-import re
 
 
 standard_library.install_aliases()
@@ -197,14 +196,6 @@ class Collection(object):
         if hasattr(self, 'item_count'):
             return self.item_count
 
-        # solr_params = {
-        #     'facet': 'false',
-        #     'rows': 0,
-        #     'fq': 'collection_url:"{}"'.format(self.url),
-        # }
-        # solr_search = SOLR_select(**solr_params)
-        # self.item_count = solr_search.numFound
-
         es_params = {
             "query": {
                 "term": {
@@ -251,19 +242,6 @@ class Collection(object):
         return facet_sets
 
     def get_facets(self, facet_fields):
-        # facet=true&facet.query=*&rows=0&facet.field=title_ss&facet.pivot=title_ss,collection_data"
-        # solr_params = {
-        #     'facet': 'true',
-        #     'rows': 0,
-        #     'facet_field': [f"{ff.facet}_ss" for ff in facet_fields],
-        #     'fq': 'collection_url:"{}"'.format(self.url),
-        #     'facet_limit': '-1',
-        #     'facet_mincount': 1,
-        #     'facet_sort': 'count',
-        # }
-        # solr_search = SOLR_select(**solr_params)
-        # self.item_count = solr_search.numFound
-
         es_params = {
             "query": {
                 "term": {
@@ -327,59 +305,105 @@ class Collection(object):
             else:
                 repositories.append(repository['name'])
 
-        # get 6 image items from the collection for the mosaic preview
-        search_terms = {
-            'q': '*:*',
-            'fields': (
-                'reference_image_md5, url_item, id, '
-                'title, collection_url, type_ss'),
-            'sort': 'sort_title asc',
-            'rows': 6,
-            'start': 0,
-            'fq':
-            [f'collection_url: \"{ self.url }\"', 'type_ss: \"image\"']
+        es_search_terms = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"terms": {"collection_ids": [self.id]}}, 
+                        {"terms": {"type.keyword": ["image"]}}
+                    ]
+                }
+            },
+            "_source": [
+                "reference_image_md5", 
+                "url_item", 
+                "calisphere-id", 
+                "title", 
+                "collection_ids", 
+                "type"
+            ],
+            "sort": [{
+                "title.keyword": {"order": "asc"}
+            }], 
+            "size": 6,
+            "from": 0
         }
-        display_items = SOLR_select(**search_terms)
-        items = display_items.results
 
-        search_terms['fq'] = [
-            f'collection_url: \"{ self.url }\"',
-            '(*:* AND -type_ss:\"image\")'
-        ]
-        ugly_display_items = SOLR_select(**search_terms)
+        display_items = elastic_client.search(
+            index="calisphere-items", body=es_search_terms)
+        items = display_items['hits']['hits']
+
+        es_search_terms['query']['bool']['filter'].pop(1)
+        es_search_terms['query']['bool']['must_not'] = [{
+            "terms": {"type.keyword": ["image"]}
+        }]
+
+        ugly_display_items = elastic_client.search(
+            index="calisphere-items", body=es_search_terms)
+
         # if there's not enough image items, get some non-image
         # items for the mosaic preview
         if len(items) < 6:
-            items = items + ugly_display_items.results
+            items = items + ugly_display_items['hits']['hits']
+
+        num_found = (
+            display_items['hits']['total']['value'] + 
+            ugly_display_items['hits']['total']['value'])
 
         return {
             'name': self.details['name'],
             'description': self.details['description'],
             'collection_id': self.id,
             'institutions': repositories,
-            'numFound': display_items.numFound + ugly_display_items.numFound,
+            'numFound': num_found,
             'display_items': items
         }
 
     def get_lockup(self, keyword_query):
-        rc_solr_params = {
-            'q': keyword_query,
-            'rows': '3',
-            'fq': [f"collection_url: \"{ self.url }\""],
-            'fields': (
-                'collection_data, reference_image_md5, '
-                'url_item, id, title, type_ss'
-            )
+        rc_es_params = {
+            "query": {
+                "bool": {
+                    "filter": [
+                        {"terms": {"collection_ids": [self.id]}}, 
+                    ]
+                }
+            },
+            "_source": [
+                "reference_image_md5", 
+                "url_item", 
+                "calisphere-id", 
+                "title", 
+                "collection_data", 
+                "type"
+            ],
+            "sort": [{
+                "title.keyword": {"order": "asc"}
+            }], 
+            "size": 3,
+            "from": 0
         }
-        collection_items = SOLR_select(**rc_solr_params)
-        collection_items = collection_items.results
+
+        if keyword_query:
+            es_query_string = {
+                "must": [{
+                    "query_string": {
+                        "query": keyword_query
+                    }
+                }]
+            }
+            rc_es_params['query']['bool'].update(es_query_string)
+
+        collection_items = elastic_client.search(
+            index="calisphere-items", body=rc_es_params)
+        collection_items = collection_items['hits']['hits']
 
         if len(collection_items) < 3:
             # redo the query without any search terms
-            rc_solr_params['q'] = ''
-            collection_items_no_query = SOLR_select(**rc_solr_params)
+            rc_es_params['query']['bool'].pop('must')
+            collection_items_no_query = elastic_client.search(
+                index="calisphere-items", body=rc_es_params)
             collection_items = (
-                collection_items + collection_items_no_query.results)
+                collection_items + collection_items_no_query['hits']['hits'])
 
         if len(collection_items) <= 0:
             # throw error
@@ -495,16 +519,21 @@ def collection_facet(request, collection_id, facet):
         values = values[start:end]
         for value in values:
             escaped_cluster_value = solr_escape(value['label'])
-            thumb_params = {
-                'facet': 'false',
-                'rows': 3,
-                'fl': 'reference_image_md5, type_ss',
-                'fq':
-                    [f'collection_url: "{collection.url}"',
-                     f'{facet}_ss: "{escaped_cluster_value}"']
+            es_thumb_params = {
+                "query": {
+                    "bool": {
+                        "filter": [
+                            {"terms": {"collection_ids": [collection.id]}},
+                            {"terms": {f"{facet}.keyword": [escaped_cluster_value]}}
+                        ]
+                    }
+                },
+                "_source": ["reference_image_md5, type_ss"],
+                "size": 3
             }
-            solr_thumbs = SOLR_select(**thumb_params)
-            value['thumbnails'] = solr_thumbs.results
+            es_thumbs = elastic_client.search(
+                index="calisphere-items", body=es_thumb_params)
+            value['thumbnails'] = es_thumbs['hits']['hits']
 
         context.update({
             'page_info':
@@ -622,17 +651,25 @@ def collection_metadata(request, collection_id):
         request, 'calisphere/collections/collectionMetadata.html', context)
 
 
-def get_cluster_thumbnails(collection_url, facet, facet_value):
+def get_cluster_thumbnails(collection_id, facet, facet_value):
     escaped_cluster_value = solr_escape(facet_value)
-    thumb_params = {
-        'facet': 'false',
-        'rows': 3,
-        'fl': 'reference_image_md5, type_ss',
-        'fq': [f'collection_url: "{collection_url}"',
-               f'{facet.facet}_ss: "{escaped_cluster_value}"']
-        }
-    solr_thumbs = SOLR_select(**thumb_params)
-    return solr_thumbs.results
+    es_thumb_params = {
+        "query": {
+            "bool": {
+                "filter": [
+                    {"terms": {'collection_ids': [collection_id]}},
+                    {"terms": {
+                        f'{facet.facet}.keyword': [escaped_cluster_value]
+                    }}
+                ]
+            }
+        },
+        "_source": ['reference_image_md5', 'type'],
+        "size": 3
+    }
+    es_thumbs = elastic_client.search(
+        index="calisphere-items", body=es_thumb_params)
+    return es_thumbs['hits']['hits']
 
 # average 'best case': http://127.0.0.1:8000/collections/27433/browse/
 # long rights statement: http://127.0.0.1:8000/collections/26241/browse/
@@ -654,7 +691,7 @@ def collection_browse(request, collection_id):
 
     for facet_set in facet_sets:
         facet_set['thumbnails'] = get_cluster_thumbnails(
-            collection.url,
+            collection.id,
             facet_set['facet_field'],
             facet_set['values'][0]['label']
         )

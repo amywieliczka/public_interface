@@ -3,7 +3,7 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.http import Http404
 from . import constants
-from .cache_retry import SOLR_select, json_loads_url, elastic_client
+from .cache_retry import json_loads_url, elastic_client
 from .search_form import CampusForm, RepositoryForm
 from .collection_views import Collection, get_rc_from_ids
 from .facet_filter_type import (
@@ -59,20 +59,6 @@ def campus_directory(request):
     except KeyError:
         print(f"ES error: {repositories_es_query}")
 
-    # repositories_solr_query = SOLR_select(
-    #     q='*:*',
-    #     rows=0,
-    #     start=0,
-    #     facet='true',
-    #     facet_mincount=1,
-    #     facet_field=['repository_url'],
-    #     facet_limit='-1')
-    # solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
-    #     'repository_url']
-    # 
-    # repositories = []
-    # for repository_url in solr_repositories:
-    #   repo_id = re.match(repo_regex, repository_url).group('repository_id')
     repositories = []
     for repo_id in es_repositories:
         repository = Repository(repo_id).get_repo_data()
@@ -119,20 +105,6 @@ def statewide_directory(request):
     except KeyError:
         print(f"ES error: {repositories_es_query}")
 
-    # repositories_solr_query = SOLR_select(
-    #     q='*:*',
-    #     rows=0,
-    #     start=0,
-    #     facet='true',
-    #     facet_mincount=1,
-    #     facet_field=['repository_url'],
-    #     facet_limit='-1')
-    # solr_repositories = repositories_solr_query.facet_counts['facet_fields'][
-    #     'repository_url']
-    # 
-    # repositories = []
-    # for repository_url in solr_repositories:
-    #     repo_id = re.match(repo_regex, repository_url).group('repository_id')
     repositories = []
     for repo_id in es_repositories:
         repository = Repository(repo_id).get_repo_data()

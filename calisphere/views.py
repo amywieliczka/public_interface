@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
-from .cache_retry import SOLR_select, SOLR_raw, json_loads_url, elastic_client
+from .cache_retry import SOLR_raw, json_loads_url, elastic_client
 from .search_form import SearchForm, solr_escape, CollectionFacetValueForm
 from .collection_views import Collection, get_rc_from_ids
 from .institution_views import Repository
@@ -104,23 +104,31 @@ def item_view(request, item_id=''):
     from_item_page = request.META.get("HTTP_X_FROM_ITEM_PAGE")
 
     item_id_search_term = 'id:"{0}"'.format(item_id)
-    item_solr_search = SOLR_select(q=item_id_search_term)
+    item_es_search = elastic_client.get(
+        index="calisphere-items", id=item_id)
+    
     order = request.GET.get('order')
 
-    if not item_solr_search.numFound:
+    if not item_es_search['found']:
         # second level search
         def _fixid(id):
             return re.sub(r'^(\d*--http:/)(?!/)', r'\1/', id)
 
-        old_id_search = SOLR_select(
-            q='harvest_id_s:*{}'.format(_fixid(item_id)))
-        if old_id_search.numFound:
+        old_id_search = elastic_client.search(
+            index="calisphere-items", body={
+                "query": {
+                    "query_string": {
+                        "query": f"harvest_id_s:*{_fixid(item_id)}"
+                    }
+                }
+            })
+        if old_id_search['hits']['total']['value']:
             return redirect('calisphere:itemView',
-                            old_id_search.results[0]['id'])
+                            old_id_search['hits']['hits'][0]['_id'])
         else:
             raise Http404("{0} does not exist".format(item_id))
 
-    item = item_solr_search.results[0]
+    item = item_es_search['_source']
     if 'reference_image_dimensions' in item:
         split_ref = item['reference_image_dimensions'].split(':')
         item['reference_image_dimensions'] = split_ref
@@ -196,19 +204,22 @@ def item_view(request, item_id=''):
     item['parsed_repository_data'] = []
     item['institution_contact'] = []
     related_collections = []
-    for collection_url in item.get('collection_url'):
-        col_id = (re.match(col_regex, collection_url).group('id'))
+    for col_id in item.get('collection_ids'):
         collection = Collection(col_id)
         item['parsed_collection_data'].append(collection.item_view())
         if not from_item_page:
             lockup_data = collection.get_lockup(item_id_search_term)
             related_collections.append(lockup_data)
 
-    for repository_url in item.get('repository_url'):
-        repo_id = re.match(repo_regex, repository_url).group('id')
+    for repo_id in item.get('repository_ids'):
         repo = Repository(repo_id)
         item['parsed_repository_data'].append(repo.get_repo_data())
         item['institution_contact'].append(repo.get_contact_info())
+
+    item.pop('word_bucket')
+    item['title'] = [item['title']]
+    item['type'] = [item['type']]
+    item['id'] = item['calisphere-id']
 
     meta_image = False
     if item.get('reference_image_md5', False):
@@ -234,7 +245,7 @@ def item_view(request, item_id=''):
     context = {
         'q': '',
         'item': search_results,
-        'item_solr_search': item_solr_search,
+        'item_solr_search': item_es_search,
         'meta_image': meta_image,
         'repository_id': None,
         'itemId': None,
@@ -248,7 +259,7 @@ def item_view(request, item_id=''):
         context = {
             'q': '',
             'item': search_results,
-            'item_solr_search': item_solr_search,
+            'item_solr_search': item_es_search,
             'meta_image': meta_image,
             'rc_page': None,
             'related_collections': related_collections,
@@ -543,20 +554,30 @@ def report_collection_facet(request, collection_id, facet):
         repository['resource_id'] = repository.get('resource_uri').split(
             '/')[-2]
 
-    # facet=true&facet.query=*&rows=0&facet.field=title_ss&facet.pivot=title_ss,collection_data"
-    solr_params = {
-        'facet': 'true',
-        'rows': 0,
-        'facet_field': '{}_ss'.format(facet),
-        'fq': 'collection_url:"{}"'.format(collection_url),
-        'facet_limit': '-1',
-        'facet_mincount': 1,
-        'facet_sort': 'count',
+    es_params = {
+        "query": {
+            "bool": {
+                "filter": [
+                    {"terms": {'collection_ids': [collection_id]}}
+                ]
+            }
+        },
+        "size": 0,
+        "aggs": {
+            facet: {
+                "terms": {
+                    "field": f'{facet}.keyword',
+                    "size": 10000
+                }
+            }
+        }
     }
-    solr_search = SOLR_select(**solr_params)
-
-    values = solr_search.facet_counts.get(
-        'facet_fields').get('{}_ss'.format(facet))
+    # regarding 'size' parameter here and getting back all the facet values
+    # please see: https://github.com/elastic/elasticsearch/issues/18838
+    es_search = elastic_client.search(
+        index="calisphere-items", body=es_params)
+    buckets = es_search['aggregations'][facet]['buckets']
+    values = {b['key']: b['doc_count'] for b in buckets}
     if not values:
         raise Http404("{0} has no values".format(facet))
     unique = len(values)
