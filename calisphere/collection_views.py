@@ -150,9 +150,11 @@ class Collection(object):
                         None,
                         type={
                             'form_name': custom_facet['facet_field'],
-                            'solr_facet_field': custom_facet['facet_field'],
+                            'es_facet_field': (
+                                f"{custom_facet['facet_field'][:-3]}.keyword"),
                             'display_name': custom_facet['label'],
-                            'solr_filter_field': custom_facet['facet_field'],
+                            'es_filter_field': (
+                                f"{custom_facet['facet_field'][:-3]}.keyword"),
                             'sort_by': 'count',
                             'faceting_allowed': True
                         }
@@ -166,7 +168,7 @@ class Collection(object):
         if self.custom_facets:
             for custom in self.custom_facets:
                 for i, facet in enumerate(custom_schema_facets):
-                    if custom.solr_facet_field == f"{facet.facet}_ss":
+                    if custom.es_facet_field == f"{facet.facet}.keyword":
                         custom_schema_facets[i] = constants.FacetDisplay(
                             facet.facet, custom.display_name)
         return custom_schema_facets
@@ -332,14 +334,12 @@ class Collection(object):
         if len(items) < 6:
             items = items + ugly_display_items.results
 
-        num_found = display_items.numFound + ugly_display_items.numFound
-
         return {
             'name': self.details['name'],
             'description': self.details['description'],
             'collection_id': self.id,
             'institutions': repositories,
-            'numFound': num_found,
+            'numFound': display_items.numFound + ugly_display_items.numFound,
             'display_items': items
         }
 
