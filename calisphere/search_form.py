@@ -222,7 +222,7 @@ class CampusForm(SearchForm):
             .get('bool')
             .get('filter')
             .append({
-                "terms": self.institution.es_filter
+                "terms": self.institution.filter
             }))
         return es_query
 
@@ -244,7 +244,7 @@ class RepositoryForm(SearchForm):
             .get('bool')
             .get('filter')
             .append({
-                "terms": self.institution.es_filter
+                "terms": self.institution.filter
             }))
         return es_query
 
@@ -275,7 +275,7 @@ class CollectionForm(SearchForm):
             .get('bool')
             .get('filter')
             .append({
-                "terms": self.collection.es_filter
+                "terms": self.collection.filter
             }))
         return es_query
 
