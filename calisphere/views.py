@@ -566,8 +566,10 @@ def report_collection_facet(request, collection_id, facet):
     }
     # regarding 'size' parameter here and getting back all the facet values
     # please see: https://github.com/elastic/elasticsearch/issues/18838
-    es_search = ES_search(es_params)
-    values = es_search.facet_counts['facet_fields'][facet]
+    facet_search = ES_search(es_params)
+
+    values = facet_search.facet_counts.get(
+        'facet_fields').get('{}'.format(facet))
     if not values:
         raise Http404("{0} has no values".format(facet))
     unique = len(values)
@@ -605,39 +607,37 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
     escaped_facet_value = solr_escape(parsed_facet_value)
 
     form = CollectionFacetValueForm(request, collection)
-    es_params = form.query_encode()
-    if es_params.get('query').get('bool').get('must'):
-        (es_params['query']['bool']['must'][0]['query_string']
+    filter_params = form.query_encode()
+    if filter_params.query_string:
+        (filter_params['query']['bool']['must'][0]['query_string']
             ['query']) += f" AND ({facet}:\"{escaped_facet_value}\")"
     else:
-        es_params['query']['bool'].update({
+        filter_params['query']['bool'].update({
             "must": [{
                 "query_string": f"{facet}:\"{escaped_facet_value}\""
             }]
         })
 
-    es_search = ES_search(es_params)
-    results = es_search.results
-    num_found = es_search.numFound
+    filter_search = ES_search(filter_params)
 
     collection_name = collection_details.get('name')
 
     context = form.context()
     context.update({
         'search_form': form.context(),
-        'search_results': results,
-        'numFound': num_found,
-        'pages': int(math.ceil(num_found / int(form.rows))),
+        'search_results': filter_search.results,
+        'numFound': filter_search.numFound,
+        'pages': int(math.ceil(filter_search.numFound / int(form.rows))),
         'facet': facet,
         'facet_value': parsed_facet_value,
         'meta_robots': "noindex,nofollow",
         'collection': collection_details,
         'collection_id': collection_id,
         'title': (
-            f"{facet}: {parsed_facet_value} ({num_found} items)"
+            f"{facet}: {parsed_facet_value} ({filter_search.numFound} items)"
             f" from: {collection_name}"),
         'description': None,
-        'solrParams': es_params,
+        'solrParams': filter_params,
         'form_action': reverse(
             'calisphere:reportCollectionFacetValue',
             kwargs={
