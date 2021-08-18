@@ -61,17 +61,17 @@ class FacetFilterType(object):
                 }
             }
 
-    def es_filter_transform(self, filter_val):
+    def filter_transform(self, filter_val):
         return filter_val
 
-    def es_facet_transform(self, facet_val):
+    def facet_transform(self, facet_val):
         return facet_val
 
     def filter_display(self, filter_val):
         return filter_val
 
-    def es_process_facets(self, facets, sort_override=None):
-        filters = list(map(self.es_filter_transform, self.form_context))
+    def process_facets(self, facets, sort_override=None):
+        filters = list(map(self.filter_transform, self.form_context))
 
         # remove facets with count of zero
         display_facets = dict(
@@ -142,10 +142,7 @@ class RepositoryFF(FacetFilterType):
     display_name = 'Contributing Institution'
     filter_field = 'repository_ids'
 
-    def filter_transform(self, repository_id):
-        return repo_template.format(repository_id)
-
-    def es_facet_transform(self, facet_val):
+    def facet_transform(self, facet_val):
         repo_id = facet_val.split('::')[0]
         return self.repo_from_id(repo_id)
 
@@ -185,25 +182,7 @@ class CollectionFF(FacetFilterType):
     display_name = 'Collection'
     filter_field = 'collection_ids'
 
-    def filter_transform(self, collection_id):
-        return col_template.format(collection_id)
-
     def facet_transform(self, collection_data):
-        parts = collection_data.split('::')
-        collection = {
-            'url': parts[0] if len(parts) >= 1 else '',
-            'name': parts[1] if len(parts) >= 2 else ''
-        }
-        collection_api_url = re.match(col_regex, collection['url'])
-        if collection_api_url is None:
-            print('no collection api url:')
-            collection['id'] = ''
-        else:
-            collection['id'] = collection_api_url.group('id')
-
-        return collection
-
-    def es_facet_transform(self, collection_data):
         parts = collection_data.split('::')
         collection = {
             'url': col_template.format(parts[0]),

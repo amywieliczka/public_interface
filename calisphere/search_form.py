@@ -174,10 +174,10 @@ class SearchForm(object):
 
             es_facets = self.es_facets[fft.facet_field]
 
-            facets[fft.facet_field] = fft.es_process_facets(es_facets)
+            facets[fft.facet_field] = fft.process_facets(es_facets)
 
             for j, facet_item in enumerate(facets[fft.facet_field]):
-                facets[fft.facet_field][j] = (fft.es_facet_transform(
+                facets[fft.facet_field][j] = (fft.facet_transform(
                     facet_item[0]), facet_item[1])
 
         return facets

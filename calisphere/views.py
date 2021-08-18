@@ -473,7 +473,7 @@ def get_related_collections(request, slug=None, repository_id=None):
         'collection_data.keyword']
 
     # remove collections with a count of 0 and sort by count
-    related_collections = field.es_process_facets(related_collections)
+    related_collections = field.process_facets(related_collections)
     # remove 'count'
     related_collections = list(facet for facet, count in related_collections)
 

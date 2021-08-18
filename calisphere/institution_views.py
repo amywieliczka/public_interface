@@ -300,7 +300,7 @@ def institution_collections(request, institution):
     col_fft = CollectionFF(request)
     solr_related_collections = list(
         collection[0] for collection in
-        col_fft.es_process_facets(sort_collection_data, 'value'))
+        col_fft.process_facets(sort_collection_data, 'value'))
     start = ((page-1) * 10)
     end = page * 10
     solr_related_collections = solr_related_collections[start:end]
@@ -441,7 +441,7 @@ def campus_institutions(request, campus_slug):
 
     related_institutions = list(
         institution[0] for institution in
-        repo_fft.es_process_facets(institutions))
+        repo_fft.process_facets(institutions))
 
     for i, related_institution in enumerate(related_institutions):
         # repo_url = related_institution.split('::')[0]
