@@ -96,8 +96,8 @@ class SearchForm(object):
         }
 
         es_query_filters = {
-            "filter": [ft.es_query for ft in self.facet_filter_types
-                       if ft.es_query]
+            "filter": [ft.query for ft in self.facet_filter_types
+                       if ft.query]
         }
 
         try:
@@ -153,11 +153,11 @@ class SearchForm(object):
 
         facets = {}
         for fft in self.facet_filter_types:
-            if (len(fft.es_query) > 0):
-                exclude_filter = fft.es_query
-                fft.es_query = None
+            if (len(fft.query) > 0):
+                exclude_filter = fft.query
+                fft.query = None
                 es_params = self.es_encode([fft])
-                fft.es_query = exclude_filter
+                fft.query = exclude_filter
 
                 if extra_filter:
                     (es_params.get('query')

@@ -49,13 +49,13 @@ class FacetFilterType(object):
         if request:
             selected_filters = request.GET.getlist(self.form_name)
             self.form_context = selected_filters
-            self.set_es_query()
+            self.set_query()
 
-    def set_es_query(self):
+    def set_query(self):
         selected_filters = self.form_context
-        self.es_query = {}
+        self.query = {}
         if len(selected_filters) > 0:
-            self.es_query = {
+            self.query = {
                 "terms": {
                     self.filter_field: selected_filters
                 }
