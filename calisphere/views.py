@@ -359,7 +359,7 @@ def item_view_carousel(request):
                       if c['slug'] == link_back_id][0]
             extra_filter = {'campus_ids': [campus['id']]}
 
-    es_params = form.es_encode()
+    es_params = form.query_encode()
     if extra_filter:
         (es_params.get('query')
             .get('bool')
@@ -427,7 +427,7 @@ def get_related_collections(request, slug=None, repository_id=None):
     form = SearchForm(request)
     field = CollectionFF(request)
 
-    es_params = form.es_encode([field])
+    es_params = form.query_encode([field])
     es_params['size'] = 0
 
     if request.GET.get('campus_slug'):
@@ -606,7 +606,7 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
     escaped_facet_value = solr_escape(parsed_facet_value)
 
     form = CollectionFacetValueForm(request, collection)
-    es_params = form.es_encode()
+    es_params = form.query_encode()
     if es_params.get('query').get('bool').get('must'):
         (es_params['query']['bool']['must'][0]['query_string']
             ['query']) += f" AND ({facet}:\"{escaped_facet_value}\")"

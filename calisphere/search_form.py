@@ -77,7 +77,7 @@ class SearchForm(object):
         }
         return search_form
 
-    def es_encode(self, facet_types=[]):
+    def query_encode(self, facet_types=[]):
         terms = (
             [solr_escape(self.q)] +
             [solr_escape(q) for q in self.rq] +
@@ -156,25 +156,26 @@ class SearchForm(object):
             if (len(fft.query) > 0):
                 exclude_filter = fft.query
                 fft.query = None
-                es_params = self.es_encode([fft])
+                facet_params = self.query_encode([fft])
                 fft.query = exclude_filter
 
                 if extra_filter:
-                    (es_params.get('query')
+                    (facet_params.get('query')
                         .get('bool')
                         .get('filter')
                         .append({
                             "terms": extra_filter
                         }))
 
-                facet_search = ES_search(es_params)
+                facet_search = ES_search(facet_params)
 
-                self.es_facets[fft.facet_field] = facet_search.facet_counts[
-                    'facet_fields'][fft.facet_field]
+                self.facets[fft.facet_field] = (
+                    facet_search.facet_counts['facet_fields']
+                    [fft.facet_field])
 
-            es_facets = self.es_facets[fft.facet_field]
+            facets_of_type = self.facets[fft.facet_field]
 
-            facets[fft.facet_field] = fft.process_facets(es_facets)
+            facets[fft.facet_field] = fft.process_facets(facets_of_type)
 
             for j, facet_item in enumerate(facets[fft.facet_field]):
                 facets[fft.facet_field][j] = (fft.facet_transform(
@@ -183,19 +184,19 @@ class SearchForm(object):
         return facets
 
     def search(self, extra_filter=None):
-        es_query = self.es_encode()
+        query = self.query_encode()
 
         if extra_filter:
-            (es_query.get('query')
+            (query.get('query')
                 .get('bool')
                 .get('filter')
                 .append({
                     "terms": extra_filter
                 }))
 
-        results = ES_search(es_query)
+        results = ES_search(query)
 
-        self.es_facets = results.facet_counts['facet_fields']
+        self.facets = results.facet_counts['facet_fields']
         return results
 
     def filter_display(self):
@@ -216,8 +217,8 @@ class CampusForm(SearchForm):
         super().__init__(request)
         self.institution = campus
 
-    def es_encode(self, facet_types=[]):
-        es_query = super().es_encode(facet_types)
+    def query_encode(self, facet_types=[]):
+        es_query = super().query_encode(facet_types)
         (es_query.get('query')
             .get('bool')
             .get('filter')
@@ -238,8 +239,8 @@ class RepositoryForm(SearchForm):
         super().__init__(request)
         self.institution = institution
 
-    def es_encode(self, facet_types=[]):
-        es_query = super().es_encode(facet_types)
+    def query_encode(self, facet_types=[]):
+        es_query = super().query_encode(facet_types)
         (es_query.get('query')
             .get('bool')
             .get('filter')
@@ -269,8 +270,8 @@ class CollectionForm(SearchForm):
                 facet_filter_types.append(ff.RelationFF(request))
         self.facet_filter_types = facet_filter_types
 
-    def es_encode(self, facet_types=[]):
-        es_query = super().es_encode(facet_types)
+    def query_encode(self, facet_types=[]):
+        es_query = super().query_encode(facet_types)
         (es_query.get('query')
             .get('bool')
             .get('filter')
