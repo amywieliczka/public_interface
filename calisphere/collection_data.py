@@ -12,14 +12,19 @@ from .cache_retry import json_loads_url, ES_search
 from django.core.cache import cache
 from django.conf import settings
 import time
+import re
 
-CollectionLink = namedtuple('CollectionLink', 'url, label')
+CollectionLink = namedtuple('CollectionLink', 'url, label, id')
+
+col_regex = (r'https://registry\.cdlib\.org/api/v1/collection/'
+             r'(?P<id>\d*)/?')
+col_template = "https://registry.cdlib.org/api/v1/collection/{0}/"
 
 
 class CollectionManager(object):
     """ manage collection information that is parsed from solr facets """
 
-    def __init__(self, solr_url, solr_key):
+    def __init__(self):
         cache_key = 'collection-manager'  # won't vary except on djano restart
         saved = cache.get(cache_key)
         if saved:
@@ -64,8 +69,12 @@ class CollectionManager(object):
                 {ord(c): None
                  for c in string.punctuation}).upper()
 
-        self.parsed = sorted(
-            [CollectionLink(*x.rsplit('::')) for x in self.data], key=sort_key)
+        parsed = []
+        for x in self.data:
+            cd = x.rsplit('::')
+            cd.insert(0, col_template.format(cd[0]))
+            parsed.append(CollectionLink(*cd))
+        self.parsed = sorted(parsed, key=sort_key)
 
         split_collections = {'num': [], 'a': []}
         names = {}
