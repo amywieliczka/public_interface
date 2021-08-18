@@ -428,8 +428,8 @@ def collection_search(request, collection_id):
     collection = Collection(collection_id)
 
     form = CollectionForm(request, collection)
-    results = form.es_search()
-    filter_display = form.es_filter_display()
+    results = form.search()
+    filter_display = form.filter_display()
 
     if settings.UCLDC_FRONT == 'https://calisphere.org/':
         browse = False
@@ -439,7 +439,7 @@ def collection_search(request, collection_id):
     context = {
         'q': form.q,
         'search_form': form.context(),
-        'facets': form.es_get_facets(collection.es_filter),
+        'facets': form.get_facets(collection.es_filter),
         'pages': int(math.ceil(results.numFound / int(form.rows))),
         'numFound': results.numFound,
         'search_results': results.results,
@@ -561,12 +561,14 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
 
     parsed_cluster_value = urllib.parse.unquote_plus(cluster_value)
     escaped_cluster_value = solr_escape(parsed_cluster_value)
-    extra_filter = f"{cluster}_ss: \"{escaped_cluster_value}\""
+    extra_filter = {f"{cluster}.keyword": [escaped_cluster_value]}
 
     results = form.search(extra_filter)
 
     if results.numFound == 1:
-        return redirect('calisphere:itemView', results.results[0]['id'])
+        return redirect(
+            'calisphere:itemView',
+            results.results[0]['_source']['calisphere-id'])
 
     collection_name = collection.details.get('name')
     context = {
@@ -574,7 +576,7 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
         'search_results': results.results,
         'numFound': results.numFound,
         'pages': int(math.ceil(results.numFound / int(form.rows))),
-        'facets': form.get_facets(collection.solr_filter),
+        'facets': form.get_facets(collection.es_filter),
         'filters': form.filter_display(),
         'cluster': cluster,
         'cluster_value': parsed_cluster_value,

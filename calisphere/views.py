@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
-from .cache_retry import SOLR_select, SOLR_raw, json_loads_url
+from .cache_retry import SOLR_select, SOLR_raw, json_loads_url, elastic_client
 from .search_form import SearchForm, solr_escape, CollectionFacetValueForm
 from .collection_views import Collection, get_rc_from_ids
 from .institution_views import Repository
@@ -267,9 +267,9 @@ def item_view(request, item_id=''):
 def search(request):
     if request.method == 'GET' and len(request.GET.getlist('q')) > 0:
         form = SearchForm(request)
-        results = form.es_search()
-        facets = form.es_get_facets()
-        filter_display = form.es_filter_display()
+        results = form.search()
+        facets = form.get_facets()
+        filter_display = form.filter_display()
 
         # rc_ids = [cd[0]['id'] for cd in facets['collection_data']]
         rc_ids = [cd[0]['id'] for cd in facets['collection_data.keyword']]
@@ -336,7 +336,7 @@ def item_view_carousel(request):
         # get any collection-specific facets
         collection = Collection(link_back_id)
         custom_facets = collection.custom_facets
-        form.facet_filter_types = form.facet_filter_types + custom_facets
+        form.facet_filter_types += custom_facets
         # # Add Custom Facet Filter Types
         if request.GET.get('relation_ss') and len(custom_facets) == 0:
             form.facet_filter_types.append(
@@ -347,47 +347,47 @@ def item_view_carousel(request):
         if link_back_id:
             campus = [c for c in constants.CAMPUS_LIST
                       if c['slug'] == link_back_id][0]
-            campus_url = campus_template.format(campus['id'])
-            extra_filter = f'campus_url: "{campus_url}"'
+            extra_filter = {'campus_ids': [campus['id']]}
 
-    solr_params = form.solr_encode()
+    es_params = form.es_encode()
     if extra_filter:
-        solr_params['fq'].append(extra_filter)
+        (es_params.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": extra_filter
+            }))
 
     # if no query string or filters, do a "more like this" search
-    if solr_params['q'] == '' and len(solr_params['fq']) == 0:
+    if form.query_string == '' and len(
+      es_params['query']['bool']['filter']) == 0:
         search_results, num_found = item_view_carousel_mlt(item_id)
     else:
-        solr_params.update({
-            'facet': 'false',
-            'fields': 'id, type_ss, reference_image_md5, title'
-        })
-        if solr_params.get('start') == 'NaN':
-            solr_params['start'] = 0
+        es_params.pop('aggs')
+        es_params['_source'] = [
+            'calisphere-id',
+            'type',
+            'reference_image_md5',
+            'title'
+        ]
+        if es_params.get('from') == 'NaN':
+            es_params['from'] = 0
 
         try:
-            carousel_solr_search = SOLR_select(**solr_params)
+            carousel_es_search = elastic_client.search(
+                index="calisphere-items", body=es_params)
         except HTTPError as e:
             # https://stackoverflow.com/a/19384641/1763984
             print((request.get_full_path()))
             raise (e)
-        search_results = carousel_solr_search.results
-        num_found = carousel_solr_search.numFound
+        search_results = carousel_es_search.results
+        num_found = carousel_es_search.numFound
 
     if request.GET.get('init'):
         context = form.context()
-        context['start'] = solr_params[
-            'start'] if solr_params['start'] != 'NaN' else 0
-
-        context['filters'] = {}
-        for filter_type in form.facet_filter_types:
-            param_name = filter_type['facet']
-            display_name = filter_type['filter']
-            filter_transform = filter_type['filter_display']
-
-            if len(request.GET.getlist(param_name)) > 0:
-                context['filters'][display_name] = list(
-                    map(filter_transform, request.GET.getlist(param_name)))
+        context['start'] = es_params[
+            'from'] if es_params['from'] != 'NaN' else 0
+        context['filters'] = form.filter_display()
 
         context.update({
             'numFound': num_found,
@@ -418,31 +418,58 @@ def get_related_collections(request, slug=None, repository_id=None):
     form = SearchForm(request)
     field = CollectionFF(request)
 
-    solr_params = form.solr_encode([field])
-    solr_params['rows'] = 0
+    es_params = form.es_encode([field])
+    es_params['size'] = 0
 
     if request.GET.get('campus_slug'):
         slug = request.GET.get('campus_slug')
 
     if slug:
         campus = [c for c in constants.CAMPUS_LIST if c['slug'] == slug][0]
-        campus_url = campus_template.format(campus['id'])
-        solr_params['fq'].append('campus_url: "' + campus_url + '"')
+        (es_params.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": {
+                    "campus_ids": [campus['id']]
+                }
+            }))
     if repository_id:
-        repo_url = repo_template.format(repository_id)
-        solr_params['fq'].append('repository_url: "' + repo_url + '"')
+        (es_params.get('query')
+            .get('bool')
+            .get('filter')
+            .append({
+                "terms": {
+                    "repository_ids": [repository_id]
+                }
+            }))
 
-    # mlt search
-    if len(solr_params['q']) == 0 and len(solr_params['fq']) == 0:
+    # mlt search (TODO, need to actually make MLT?)
+    if len(form.query_string) == 0 and len(
+      es_params['query']['bool']['filter']) == 0:
         if request.GET.get('itemId'):
-            solr_params['q'] = 'id:' + request.GET.get('itemId', '')
+            (es_params.get('query')
+                .get('bool')
+                .update({
+                    "must": [{
+                        "query_string": {
+                            "query": request.GET.get('itemId', ''),
+                            "fields": ["calisphere-id"]
+                        }
+                    }]
+                }))
 
-    related_collections = SOLR_select(**solr_params)
-    related_collections = related_collections.facet_counts['facet_fields'][
-        'collection_data']
+    related_collections = elastic_client.search(
+        index="calisphere-items", body=es_params)
+
+    buckets = (related_collections
+               .get('aggregations')
+               .get('collection_data.keyword')
+               .get('buckets'))
+    related_collections = {b['key']: b['doc_count'] for b in buckets}
 
     # remove collections with a count of 0 and sort by count
-    related_collections = field.process_facets(related_collections)
+    related_collections = field.es_process_facets(related_collections)
     # remove 'count'
     related_collections = list(facet for facet, count in related_collections)
 
@@ -453,10 +480,9 @@ def get_related_collections(request, slug=None, repository_id=None):
         if len(related_collections) <= i or not related_collections[i]:
             break
 
-        col_id = (re.match(
-            col_regex, related_collections[i].split('::')[0]).group('id'))
+        col_id = related_collections[i].split('::')[0]
         collection = Collection(col_id)
-        lockup_data = collection.get_lockup(solr_params['q'])
+        lockup_data = collection.get_lockup(form.query_string)
         three_related_collections.append(lockup_data)
 
     return three_related_collections, len(related_collections)
@@ -568,31 +594,40 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
     escaped_facet_value = solr_escape(parsed_facet_value)
 
     form = CollectionFacetValueForm(request, collection)
-    solr_params = form.solr_encode()
-    if solr_params['q']:
-        solr_params['q'] += " AND "
-    solr_params['q'] += f"{facet}_ss:\"{escaped_facet_value}\""
+    es_params = form.es_encode()
+    if es_params.get('query').get('bool').get('must'):
+        (es_params['query']['bool']['must'][0]['query_string']
+            ['query']) += f" AND ({facet}:\"{escaped_facet_value}\")"
+    else:
+        es_params['query']['bool'].update({
+            "must": [{
+                "query_string": f"{facet}:\"{escaped_facet_value}\""
+            }]
+        })
 
-    solr_search = SOLR_select(**solr_params)
+    es_search = elastic_client(
+        index="calisphere-items", body=es_params)
+    results = es_search['hits']['hits']
+    num_found = es_search['hits']['total']['value']
 
     collection_name = collection_details.get('name')
 
     context = form.context()
     context.update({
         'search_form': form.context(),
-        'search_results': solr_search.results,
-        'numFound': solr_search.numFound,
-        'pages': int(math.ceil(solr_search.numFound / int(form.rows))),
+        'search_results': results,
+        'numFound': num_found,
+        'pages': int(math.ceil(num_found / int(form.rows))),
         'facet': facet,
         'facet_value': parsed_facet_value,
         'meta_robots': "noindex,nofollow",
         'collection': collection_details,
         'collection_id': collection_id,
         'title': (
-            f"{facet}: {parsed_facet_value} ({solr_search.numFound} items)"
+            f"{facet}: {parsed_facet_value} ({num_found} items)"
             f" from: {collection_name}"),
         'description': None,
-        'solrParams': solr_params,
+        'solrParams': es_params,
         'form_action': reverse(
             'calisphere:reportCollectionFacetValue',
             kwargs={

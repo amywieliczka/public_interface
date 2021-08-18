@@ -276,9 +276,9 @@ class Repository(object):
 
 
 def institution_search(request, form, institution):
-    results = form.es_search()
-    facets = form.es_get_facets(institution.es_filter)
-    filter_display = form.es_filter_display()
+    results = form.search()
+    facets = form.get_facets(institution.es_filter)
+    filter_display = form.filter_display()
 
     page = (int(form.start) // int(form.rows)) + 1
     title = f"{institution.full_name} Items"
