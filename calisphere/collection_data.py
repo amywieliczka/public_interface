@@ -46,8 +46,8 @@ class CollectionManager(object):
             }
 
             save = {}
-            es_data = ES_search(es_query)
-            save['data'] = self.data = list(es_data.facet_counts[
+            index_data = ES_search(es_query)
+            save['data'] = self.data = list(index_data.facet_counts[
                 'facet_fields']['collection_data'].keys())
             self.parse()
             save['parsed'] = self.parsed
@@ -55,7 +55,7 @@ class CollectionManager(object):
             save['split'] = self.split
             save['no_collections'] = self.no_collections
             save['shuffled'] = self.shuffled
-            save['total_objects'] = es_data.numFound
+            save['total_objects'] = index_data.numFound
             cache.set(cache_key, save, settings.DJANGO_CACHE_TIMEOUT)
 
     def parse(self):
