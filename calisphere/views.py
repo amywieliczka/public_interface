@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
-from .cache_retry import SOLR_raw, json_loads_url, ES_GET, ES_search
+from .cache_retry import SOLR_raw, json_loads_url, ES_get, ES_search
 from .search_form import SearchForm, solr_escape, CollectionFacetValueForm
 from .collection_views import Collection, get_rc_from_ids
 from .institution_views import Repository
@@ -104,8 +104,7 @@ def item_view(request, item_id=''):
     from_item_page = request.META.get("HTTP_X_FROM_ITEM_PAGE")
 
     item_id_search_term = 'id:"{0}"'.format(item_id)
-    item_search = ES_GET(item_id)
-    
+    item_search = ES_get(item_id)
     order = request.GET.get('order')
 
     if not item_search.found:
