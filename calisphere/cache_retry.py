@@ -32,7 +32,7 @@ elastic_client = Elasticsearch(
 ESResults = namedtuple(
     'ESResults', 'results numFound facet_counts')
 ESItem = namedtuple(
-    'ESItem', 'found, item')
+    'ESItem', 'found, item, resp')
 
 
 def ES_search(body):
@@ -48,6 +48,9 @@ def ES_search(body):
             facet_counts['facet_fields'][facet_field] = facet_values
     else:
         facet_counts = {}
+
+    for item in results['hits']['hits']:
+        item['id'] = item['_id']
 
     results = ESResults(
         results['hits']['hits'],
@@ -69,7 +72,7 @@ def ES_get(item_id):
     item['type'] = [item['type']]
     item['id'] = item['calisphere-id']
 
-    results = ESItem(found, item)
+    results = ESItem(found, item, item_search)
     return results
 
 

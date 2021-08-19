@@ -122,7 +122,7 @@ def item_view(request, item_id=''):
             })
         if old_id_search.numFound:
             return redirect('calisphere:itemView',
-                            old_id_search.results[0]['_id'])
+                            old_id_search.results[0]['id'])
         else:
             raise Http404("{0} does not exist".format(item_id))
 
@@ -238,7 +238,7 @@ def item_view(request, item_id=''):
     context = {
         'q': '',
         'item': search_results,
-        'item_solr_search': item_search,
+        'item_solr_search': item_search.resp,
         'meta_image': meta_image,
         'repository_id': None,
         'itemId': None,
@@ -252,7 +252,7 @@ def item_view(request, item_id=''):
         context = {
             'q': '',
             'item': search_results,
-            'item_solr_search': item_search,
+            'item_solr_search': item_search.resp,
             'meta_image': meta_image,
             'rc_page': None,
             'related_collections': related_collections,
