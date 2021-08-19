@@ -60,7 +60,7 @@ class CollectionManager(object):
             save['split'] = self.split
             save['no_collections'] = self.no_collections
             save['shuffled'] = self.shuffled
-            save['total_objects'] = index_data.numFound
+            save['total_objects'] = self.total_objects = index_data.numFound
             cache.set(cache_key, save, settings.DJANGO_CACHE_TIMEOUT)
 
     def parse(self):
