@@ -55,6 +55,7 @@ class SearchForm(object):
                 })
 
         self.sort = self.sort_field(request).sort
+        self.implicit_filter = None
 
     def context(self):
         fft = [{
@@ -141,9 +142,15 @@ class SearchForm(object):
         # if query_fields:
         #     solr_query.update({'qf': query_fields})
 
+        if self.implicit_filter:
+            (es_query.get('query')
+                .get('bool')
+                .get('filter')
+                .append(self.implicit_filter))
+
         return es_query
 
-    def get_facets(self, extra_filter=None):
+    def get_facets(self):
         # get facet counts
         # if the user's selected some of the available facets (ie - there are
         # filters selected for this field type) perform a search as if those
@@ -161,11 +168,11 @@ class SearchForm(object):
                 facet_params = self.query_encode([fft])
                 fft.query = exclude_filter
 
-                if extra_filter:
+                if self.implicit_filter:
                     (facet_params.get('query')
                         .get('bool')
                         .get('filter')
-                        .append(extra_filter))
+                        .append(self.implicit_filter))
 
                 facet_search = ES_search(facet_params)
 
@@ -215,14 +222,7 @@ class CampusForm(SearchForm):
     def __init__(self, request, campus):
         super().__init__(request)
         self.institution = campus
-
-    def query_encode(self, facet_types=[]):
-        es_query = super().query_encode(facet_types)
-        (es_query.get('query')
-            .get('bool')
-            .get('filter')
-            .append(self.institution.filter))
-        return es_query
+        self.implicit_filter = campus.filter
 
 
 class RepositoryForm(SearchForm):
@@ -235,14 +235,7 @@ class RepositoryForm(SearchForm):
     def __init__(self, request, institution):
         super().__init__(request)
         self.institution = institution
-
-    def query_encode(self, facet_types=[]):
-        es_query = super().query_encode(facet_types)
-        (es_query.get('query')
-            .get('bool')
-            .get('filter')
-            .append(self.institution.filter))
-        return es_query
+        self.implicit_filter = institution.filter
 
 
 class CollectionForm(SearchForm):
@@ -264,14 +257,7 @@ class CollectionForm(SearchForm):
             if request.GET.get('relation_ss'):
                 facet_filter_types.append(ff.RelationFF(request))
         self.facet_filter_types = facet_filter_types
-
-    def query_encode(self, facet_types=[]):
-        es_query = super().query_encode(facet_types)
-        (es_query.get('query')
-            .get('bool')
-            .get('filter')
-            .append(self.collection.filter))
-        return es_query
+        self.implicit_filter = collection.filter
 
 
 class AltSortField(SortField):
