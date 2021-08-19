@@ -274,7 +274,7 @@ def search(request):
         facets = form.get_facets()
         filter_display = form.filter_display()
 
-        rc_ids = [cd[0]['id'] for cd in facets['collection_data.keyword']]
+        rc_ids = [cd[0]['id'] for cd in facets[CollectionFF.facet_field]]
         if len(request.GET.getlist('collection_data')):
             rc_ids = request.GET.getlist('collection_data')
 
@@ -462,7 +462,7 @@ def get_related_collections(request, slug=None, repository_id=None):
 
     related_collections = ES_search(rc_params)
     related_collections = related_collections.facet_counts['facet_fields'][
-        'collection_data.keyword']
+        CollectionFF.facet_field]
 
     # remove collections with a count of 0 and sort by count
     related_collections = field.process_facets(related_collections)
