@@ -31,6 +31,8 @@ elastic_client = Elasticsearch(
 
 ESResults = namedtuple(
     'ESResults', 'results numFound facet_counts')
+ESItem = namedtuple(
+    'ESItem', 'found, item')
 
 
 def ES_search(body):
@@ -52,6 +54,22 @@ def ES_search(body):
         results['hits']['total']['value'],
         facet_counts)
 
+    return results
+
+
+def ES_get(item_id):
+    item_search = elastic_client.get(
+        index="calisphere-items", id=item_id)
+    found = item_search['found']
+    item = item_search['_source']
+
+    # make it look a little more like solr
+    item.pop('word_bucket')
+    item['title'] = [item['title']]
+    item['type'] = [item['type']]
+    item['id'] = item['calisphere-id']
+
+    results = ESItem(found, item)
     return results
 
 
