@@ -104,7 +104,7 @@ def collections_titles(request):
     data = [{
         'uri': djangoize(id),
         'title': title
-    } for (url, title, id) in collections.parsed]
+    } for (uri, title, id) in collections.parsed]
     return JsonResponse(data, safe=False)
 
 
