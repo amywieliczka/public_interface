@@ -156,7 +156,7 @@ class Campus(object):
         else:
             self.contact_info = ''
 
-        self.filter = {'campus_ids': [self.id]}
+        self.filter = {'terms': {'campus_ids': [self.id]}}
 
 
 class Repository(object):
@@ -187,7 +187,7 @@ class Repository(object):
             if feat:
                 self.featured_image = feat[0].get('featuredImage')
 
-        self.filter = {'repository_ids': [self.id]}
+        self.filter = {'terms': {'repository_ids': [self.id]}}
 
     def __str__(self):
         return f"{self.id}: {self.details.name}"
@@ -272,9 +272,7 @@ def institution_collections(request, institution):
     page = int(request.GET['page']) if 'page' in request.GET else 1
 
     collections_params = {
-        "query": {
-            "terms": institution.filter
-        },
+        "query": institution.filter,
         "size": 0,
         "aggs": {
             "collection_data": {

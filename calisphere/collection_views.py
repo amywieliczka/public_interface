@@ -134,7 +134,7 @@ class Collection(object):
         self.custom_facets = self._parse_custom_facets()
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
-        self.filter = {'collection_ids': [self.id]}
+        self.filter = {'terms': {'collection_ids': [self.id]}}
 
     def _parse_custom_facets(self):
         custom_facets = []
@@ -188,11 +188,7 @@ class Collection(object):
             return self.item_count
 
         es_params = {
-            "query": {
-                "term": {
-                    "collection_ids": self.id
-                }
-            },
+            "query": self.filter,
             "size": 0
         }
         item_count_search = ES_search(es_params)
@@ -233,11 +229,7 @@ class Collection(object):
 
     def get_facets(self, facet_fields):
         es_params = {
-            "query": {
-                "term": {
-                    'collection_ids': self.id
-                }
-            },
+            "query": self.filter,
             "size": 0,
             "aggs": {}
         }
@@ -294,7 +286,7 @@ class Collection(object):
             "query": {
                 "bool": {
                     "filter": [
-                        {"terms": {"collection_ids": [self.id]}}, 
+                        self.filter, 
                         {"terms": {"type.keyword": ["image"]}}
                     ]
                 }
@@ -340,13 +332,7 @@ class Collection(object):
 
     def get_lockup(self, keyword_query):
         rc_params = {
-            "query": {
-                "bool": {
-                    "filter": [
-                        {"terms": {"collection_ids": [self.id]}}, 
-                    ]
-                }
-            },
+            "query": self.filter,
             "_source": [
                 "reference_image_md5", 
                 "url_item", 
@@ -499,7 +485,7 @@ def collection_facet(request, collection_id, facet):
                 "query": {
                     "bool": {
                         "filter": [
-                            {"terms": {"collection_ids": [collection.id]}},
+                            collection.filter,
                             {"terms": {f"{facet}.keyword": [escaped_cluster_value]}}
                         ]
                     }
@@ -626,13 +612,13 @@ def collection_metadata(request, collection_id):
         request, 'calisphere/collections/collectionMetadata.html', context)
 
 
-def get_cluster_thumbnails(collection_id, facet, facet_value):
+def get_cluster_thumbnails(collection, facet, facet_value):
     escaped_cluster_value = solr_escape(facet_value)
     thumb_params = {
         "query": {
             "bool": {
                 "filter": [
-                    {"terms": {'collection_ids': [collection_id]}},
+                    collection.filter,
                     {"terms": {
                         f'{facet.facet}.keyword': [escaped_cluster_value]
                     }}
@@ -665,7 +651,7 @@ def collection_browse(request, collection_id):
 
     for facet_set in facet_sets:
         facet_set['thumbnails'] = get_cluster_thumbnails(
-            collection.id,
+            collection,
             facet_set['facet_field'],
             facet_set['values'][0]['label']
         )

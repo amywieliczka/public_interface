@@ -165,9 +165,7 @@ class SearchForm(object):
                     (facet_params.get('query')
                         .get('bool')
                         .get('filter')
-                        .append({
-                            "terms": extra_filter
-                        }))
+                        .append(extra_filter))
 
                 facet_search = ES_search(facet_params)
 
@@ -223,9 +221,7 @@ class CampusForm(SearchForm):
         (es_query.get('query')
             .get('bool')
             .get('filter')
-            .append({
-                "terms": self.institution.filter
-            }))
+            .append(self.institution.filter))
         return es_query
 
 
@@ -245,9 +241,7 @@ class RepositoryForm(SearchForm):
         (es_query.get('query')
             .get('bool')
             .get('filter')
-            .append({
-                "terms": self.institution.filter
-            }))
+            .append(self.institution.filter))
         return es_query
 
 
@@ -276,9 +270,7 @@ class CollectionForm(SearchForm):
         (es_query.get('query')
             .get('bool')
             .get('filter')
-            .append({
-                "terms": self.collection.filter
-            }))
+            .append(self.collection.filter))
         return es_query
 
 
