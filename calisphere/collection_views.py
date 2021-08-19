@@ -556,9 +556,7 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
     results = form.search(extra_filter)
 
     if results.numFound == 1:
-        return redirect(
-            'calisphere:itemView',
-            results.results[0]['_source']['calisphere-id'])
+        return redirect('calisphere:itemView', results.results[0]['id'])
 
     collection_name = collection.details.get('name')
     context = {
