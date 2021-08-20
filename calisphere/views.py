@@ -14,6 +14,7 @@ from static_sitemaps.util import _lazy_load
 from static_sitemaps import conf
 from requests.exceptions import HTTPError
 from exhibits.models import ExhibitItem, Exhibit
+from .temp import query_encode
 
 import os
 import math
@@ -112,13 +113,11 @@ def item_view(request, item_id=''):
         def _fixid(id):
             return re.sub(r'^(\d*--http:/)(?!/)', r'\1/', id)
 
-        old_id_search = ES_search({
-                "query": {
-                    "query_string": {
-                        "query": f"harvest_id_s:*{_fixid(item_id)}"
-                    }
-                }
-            })
+        old_id_query = {
+            "query_string": f"harvest_id_s:*{_fixid(item_id)}",
+            "rows": 10
+        }
+        old_id_search = ES_search(query_encode(**old_id_query))
         if old_id_search.numFound:
             return redirect('calisphere:itemView',
                             old_id_search.results[0]['id'])
@@ -269,7 +268,7 @@ def item_view(request, item_id=''):
 
 def search(request):
     if request.method == 'GET' and len(request.GET.getlist('q')) > 0:
-        form = SearchForm(request)
+        form = SearchForm(request.GET.copy())
         results = form.search()
         facets = form.get_facets()
         filter_display = form.filter_display()
@@ -329,7 +328,7 @@ def item_view_carousel(request):
     referral = request.GET.get('referral')
     link_back_id = ''
     extra_filter = None
-    form = SearchForm(request)
+    form = SearchForm(request.GET.copy())
 
     if referral == 'institution':
         link_back_id = request.GET.get('repository_data', None)
@@ -416,7 +415,7 @@ repo_template = "https://registry.cdlib.org/api/v1/repository/{0}/"
 
 
 def get_related_collections(request, slug=None, repository_id=None):
-    form = SearchForm(request)
+    form = SearchForm(request.GET.copy())
     field = CollectionFF(request)
 
     rc_params = form.query_encode([field])
@@ -540,26 +539,13 @@ def report_collection_facet(request, collection_id, facet):
             '/')[-2]
 
     es_params = {
-        "query": {
-            "bool": {
-                "filter": [
-                    {"terms": {'collection_ids': [collection_id]}}
-                ]
-            }
-        },
-        "size": 0,
-        "aggs": {
-            facet: {
-                "terms": {
-                    "field": f'{facet}.keyword',
-                    "size": 10000
-                }
-            }
-        }
+        "filters": [{'collection_ids': [collection_id]}],
+        "facets": [facet]
     }
+
     # regarding 'size' parameter here and getting back all the facet values
     # please see: https://github.com/elastic/elasticsearch/issues/18838
-    facet_search = ES_search(es_params)
+    facet_search = ES_search(query_encode(**es_params))
 
     values = facet_search.facet_counts.get(
         'facet_fields').get('{}'.format(facet))
@@ -599,7 +585,7 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
     parsed_facet_value = urllib.parse.unquote_plus(facet_value)
     escaped_facet_value = solr_escape(parsed_facet_value)
 
-    form = CollectionFacetValueForm(request, collection)
+    form = CollectionFacetValueForm(request.GET.copy(), collection)
     filter_params = form.query_encode()
     if filter_params.query_string:
         (filter_params['query']['bool']['must'][0]['query_string']

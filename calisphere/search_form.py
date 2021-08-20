@@ -2,6 +2,8 @@ from .cache_retry import ES_search
 from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
+from .temp import query_encode as es_query_encode
+import json 
 
 
 def solr_escape(text):
@@ -13,12 +15,12 @@ class SortField(object):
     no_keyword = 'a'
 
     def __init__(self, request):
-        if (request.GET.get('q')
-           or request.GET.getlist('rq')
-           or request.GET.getlist('fq')):
-            self.sort = request.GET.get('sort', self.default)
+        if (request.get('q')
+           or request.getlist('rq')
+           or request.getlist('fq')):
+            self.sort = request.get('sort', self.default)
         else:
-            self.sort = request.GET.get('sort', self.no_keyword)
+            self.sort = request.get('sort', self.no_keyword)
 
 
 class SearchForm(object):
@@ -39,7 +41,7 @@ class SearchForm(object):
     ]
 
     def __init__(self, request):
-        self.request = request.GET.copy()
+        self.request = request
         self.facet_filter_types = [
             ff_field(request) for ff_field in self.facet_filter_fields
         ]
@@ -47,11 +49,11 @@ class SearchForm(object):
         for field in self.simple_fields:
             if isinstance(self.simple_fields[field], list):
                 self.__dict__.update({
-                    field: request.GET.getlist(field)
+                    field: self.request.getlist(field)
                 })
             else:
                 self.__dict__.update({
-                    field: request.GET.get(field, self.simple_fields[field])
+                    field: self.request.get(field, self.simple_fields[field])
                 })
 
         self.sort = self.sort_field(request).sort
@@ -90,19 +92,6 @@ class SearchForm(object):
             terms[0] if len(terms) == 1 else " AND ".join(terms))
         # qt_string = qt_string.replace('?', '')
 
-        es_query_string = {
-            "must": [{
-                "query_string": {
-                    "query": self.query_string
-                }
-            }]
-        }
-
-        es_query_filters = {
-            "filter": [ft.query for ft in self.facet_filter_types
-                       if ft.query]
-        }
-
         try:
             rows = int(self.rows)
             start = int(self.start)
@@ -110,45 +99,30 @@ class SearchForm(object):
             raise Http404("{0} does not exist".format(err))
 
         sort = constants.SORT_OPTIONS[self.sort]
-        print(f'TODO: set sort for ES: {sort}')
+        print(f'ToDo: add sort: {sort}')
 
         if len(facet_types) == 0:
             facet_types = self.facet_filter_types
 
-        aggs = {}
-        for facet_type in facet_types:
-            aggs.update({
-                facet_type.facet_field: {
-                    "terms": {
-                        "field": facet_type.facet_field
-                    }
-                }
-            })
-
-        if self.query_string:
-            es_query_filters.update(es_query_string)
-
-        es_query = {
-            "query": {
-                "bool": es_query_filters
-            },
-            "size": rows,
-            "from": start,
-            "aggs": aggs
+        es_query_new = {
+            "query_string": self.query_string,
+            "filters": [ft.basic_query for ft in self.facet_filter_types 
+                        if ft.basic_query],
+            "rows": rows,
+            "start": start,
+            # "sort": tuple(sort.split(' ')),
+            "facets": [ft.facet_field for ft in facet_types]
         }
-        # TODO: add sort!
+        if self.implicit_filter:
+            es_query_new['filters'].append(self.basic_implicit_filter)
+
+        new_query = es_query_encode(**es_query_new)
 
         # query_fields = self.request.get('qf')
         # if query_fields:
         #     solr_query.update({'qf': query_fields})
 
-        if self.implicit_filter:
-            (es_query.get('query')
-                .get('bool')
-                .get('filter')
-                .append(self.implicit_filter))
-
-        return es_query
+        return new_query
 
     def get_facets(self):
         # get facet counts
@@ -163,10 +137,10 @@ class SearchForm(object):
         facets = {}
         for fft in self.facet_filter_types:
             if (len(fft.query) > 0):
-                exclude_filter = fft.query
-                fft.query = None
+                exclude_filter = fft.basic_query
+                fft.basic_query = None
                 facet_params = self.query_encode([fft])
-                fft.query = exclude_filter
+                fft.basic_query = exclude_filter
 
                 if self.implicit_filter:
                     (facet_params.get('query')
@@ -254,7 +228,7 @@ class CollectionForm(SearchForm):
         # this is a bit crude and assumes if any custom facets, relation_ss 
         # is a custom facet
         if not collection.custom_facets:
-            if request.GET.get('relation_ss'):
+            if self.request.get('relation_ss'):
                 facet_filter_types.append(ff.RelationFF(request))
         self.facet_filter_types = facet_filter_types
         self.implicit_filter = collection.filter

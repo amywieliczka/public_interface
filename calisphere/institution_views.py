@@ -10,6 +10,7 @@ from .facet_filter_type import (
     CollectionFF, RepositoryFF)
 from django.apps import apps
 from django.conf import settings
+from .temp import query_encode
 
 import math
 import re
@@ -39,16 +40,8 @@ def process_sort_collection_data(string):
 
 
 def campus_directory(request):
-    repositories_query = ES_search({
-            "size": 0,
-            "aggs": {
-                "repository_ids": {
-                    "terms": {
-                        "field": "repository_ids"
-                    }
-                }
-            }
-        })
+    repositories_query = {"facets": ["repository_ids"]}
+    repositories_query = ES_search(**query_encode(repositories_query))
     index_repositories = list(repositories_query.facet_counts['facet_fields'][
         'repository_ids'].keys())
 
@@ -79,18 +72,12 @@ def campus_directory(request):
 
 
 def statewide_directory(request):
-    repositories_query = ES_search({
-            "size": 0,
-            "aggs": {
-                "repository_id": {
-                    "terms": {
-                        "field": "repository_ids"
-                    }
-                }
-            }
-        })
+    repositories_query = {
+        "facets": ["repository_ids"]
+    }
+    repositories_query = ES_search(query_encode(**repositories_query))
     index_repositories = list(repositories_query.facet_counts['facet_fields'][
-        'repository_id'].keys())
+        'repository_ids'].keys())
 
     repositories = []
     for repo_id in index_repositories:
@@ -156,6 +143,7 @@ class Campus(object):
         else:
             self.contact_info = ''
 
+        self.basic_filter = {'campus_ids': [self.id]}
         self.filter = {'terms': {'campus_ids': [self.id]}}
 
 
@@ -187,6 +175,7 @@ class Repository(object):
             if feat:
                 self.featured_image = feat[0].get('featuredImage')
 
+        self.basic_filter = {'repository_ids': [self.id]}
         self.filter = {'terms': {'repository_ids': [self.id]}}
 
     def __str__(self):
@@ -295,15 +284,15 @@ def institution_collections(request, institution):
     # use the `facet_decade` mode of process_facets to do a
     # lexical sort by value ....
     col_fft = CollectionFF(request)
-    related_collections = list(
+    sort_collection_data = list(
         collection[0] for collection in
         col_fft.process_facets(sort_collection_data, 'value'))
     start = ((page-1) * 10)
     end = page * 10
-    related_collections = related_collections[start:end]
+    sort_collection_data = sort_collection_data[start:end]
 
     related_collections = []
-    for i, related_collection in enumerate(related_collections):
+    for i, related_collection in enumerate(sort_collection_data):
         collection_parts = process_sort_collection_data(
             related_collection)
         col_id = collection_parts[0]
@@ -329,7 +318,7 @@ def institution_collections(request, institution):
 
 def repository_search(request, repository_id):
     institution = Repository(repository_id)
-    form = RepositoryForm(request, institution)
+    form = RepositoryForm(request.GET.copy(), institution)
 
     context = institution_search(request, form, institution)
 
@@ -374,7 +363,7 @@ def repository_collections(request, repository_id):
 
 def campus_search(request, campus_slug):
     institution = Campus(campus_slug)
-    form = CampusForm(request, institution)
+    form = CampusForm(request.GET.copy(), institution)
     context = institution_search(request, form, institution)
 
     context.update({
@@ -416,21 +405,11 @@ def campus_collections(request, campus_slug):
 def campus_institutions(request, campus_slug):
     institution = Campus(campus_slug)
 
-    institutions_search = ES_search({
-            "query": {
-                "term": {
-                    "campus_ids": institution.id
-                }
-            },
-            "size": 0,
-            "aggs": {
-                "repository_data": {
-                    "terms": {
-                        "field": "repository_data.keyword"
-                    }
-                }
-            }
-        })
+    institutions_query = {
+        'filters': [institution.basic_filter],
+        'facets': ['repository_data']
+    }
+    institutions_search = ES_search(query_encode(**institutions_query))
     institutions = institutions_search.facet_counts['facet_fields'][
         'repository_data']
 

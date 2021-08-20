@@ -9,12 +9,12 @@ from .facet_filter_type import FacetFilterType
 from .cache_retry import json_loads_url, ES_search
 from .search_form import CollectionForm, solr_escape
 from builtins import range
+from .temp import query_encode
 
 import os
 import math
 import string
 import urllib.parse
-
 
 standard_library.install_aliases()
 
@@ -134,6 +134,7 @@ class Collection(object):
         self.custom_facets = self._parse_custom_facets()
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
+        self.basic_filter = {'collection_ids': [self.id]}
         self.filter = {'terms': {'collection_ids': [self.id]}}
 
     def _parse_custom_facets(self):
@@ -186,12 +187,11 @@ class Collection(object):
     def get_item_count(self):
         if hasattr(self, 'item_count'):
             return self.item_count
-
         es_params = {
-            "query": self.filter,
-            "size": 0
+            "filters": [self.basic_filter],
+            "rows": 0
         }
-        item_count_search = ES_search(es_params)
+        item_count_search = ES_search(query_encode(**es_params))
         self.item_count = item_count_search.numFound
         return self.item_count
 
@@ -229,20 +229,11 @@ class Collection(object):
 
     def get_facets(self, facet_fields):
         es_params = {
-            "query": self.filter,
-            "size": 0,
-            "aggs": {}
+            "filters": [self.basic_filter],
+            "rows": 0,
+            "facets": [ff.facet for ff in facet_fields]
         }
-        for ff in facet_fields:
-            es_params['aggs'][ff.facet] = {
-                "terms": {
-                    "field": f'{ff.facet}.keyword',
-                    "size": 10000
-                }
-            }
-        # regarding 'size' parameter here and getting back all the facet values
-        # please see: https://github.com/elastic/elasticsearch/issues/18838
-        facet_search = ES_search(es_params)
+        facet_search = ES_search(query_encode(**es_params))
         self.item_count = facet_search.numFound
         
         facets = []
@@ -283,38 +274,30 @@ class Collection(object):
 
         # get 6 image items from the collection for the mosaic preview
         search_terms = {
-            "query": {
-                "bool": {
-                    "filter": [
-                        self.filter, 
-                        {"terms": {"type.keyword": ["image"]}}
-                    ]
-                }
-            },
-            "_source": [
-                "reference_image_md5", 
-                "url_item", 
-                "calisphere-id", 
-                "title", 
-                "collection_ids", 
+            "filters": [
+                self.basic_filter,
+                {"type.keyword": ["image"]}
+            ],
+            "result_fields": [
+                "reference_image_md5",
+                "url_item",
+                "calisphere-id",
+                "title",
+                "collection_ids",
                 "type"
             ],
-            "sort": [{
-                "title.keyword": {"order": "asc"}
-            }], 
-            "size": 6,
-            "from": 0
+            "sort": ("title.keyword", "asc"),
+            "rows": 6,
+            "start": 0
         }
 
-        display_items = ES_search(search_terms)
+        display_items = ES_search(query_encode(**search_terms))
         items = display_items.results
 
-        search_terms['query']['bool']['filter'].pop(1)
-        search_terms['query']['bool']['must_not'] = [{
-            "terms": {"type.keyword": ["image"]}
-        }]
-
-        ugly_display_items = ES_search(search_terms)
+        search_terms['filters'].pop(1)
+        search_terms['exclude'] = [{"type.keyword": ["image"]}]
+        
+        ugly_display_items = ES_search(query_encode(**search_terms))
 
         # if there's not enough image items, get some non-image
         # items for the mosaic preview
@@ -332,39 +315,30 @@ class Collection(object):
 
     def get_lockup(self, keyword_query):
         rc_params = {
-            "query": self.filter,
-            "_source": [
-                "reference_image_md5", 
-                "url_item", 
-                "calisphere-id", 
-                "title", 
-                "collection_data", 
+            'filters': [self.basic_filter],
+            'result_fields': [
+                "reference_image_md5",
+                "url_item",
+                "calisphere-id",
+                "title",
+                "collection_data",
                 "type"
             ],
-            "sort": [{
-                "title.keyword": {"order": "asc"}
-            }], 
-            "size": 3,
-            "from": 0
+            'sort': ("title.keyword", "asc"),
+            "rows": 3,
+            "start": 0
         }
 
         if keyword_query:
-            es_query_string = {
-                "must": [{
-                    "query_string": {
-                        "query": keyword_query
-                    }
-                }]
-            }
-            rc_params['query']['bool'].update(es_query_string)
+            rc_params['query_string'] = keyword_query
 
-        collection_items = ES_search(rc_params)
+        collection_items = ES_search(query_encode(**rc_params))
         collection_items = collection_items.results
 
         if len(collection_items) < 3:
             # redo the query without any search terms
-            rc_params['query']['bool'].pop('must')
-            collection_items_no_query = ES_search(rc_params)
+            rc_params.pop('query_string')
+            collection_items_no_query = ES_search(query_encode(**rc_params))
             collection_items += collection_items_no_query.results
 
         if len(collection_items) <= 0:
@@ -413,14 +387,15 @@ class Collection(object):
 def collection_search(request, collection_id):
     collection = Collection(collection_id)
 
-    form = CollectionForm(request, collection)
+    form = CollectionForm(request.GET.copy(), collection)
     results = form.search()
     filter_display = form.filter_display()
 
     if settings.UCLDC_FRONT == 'https://calisphere.org/':
         browse = False
     else:
-        browse = collection.get_facet_sets()
+        browse = True
+        # browse = collection.get_facet_sets()
 
     context = {
         'q': form.q,
@@ -482,18 +457,14 @@ def collection_facet(request, collection_id, facet):
         for value in values:
             escaped_cluster_value = solr_escape(value['label'])
             thumb_params = {
-                "query": {
-                    "bool": {
-                        "filter": [
-                            collection.filter,
-                            {"terms": {f"{facet}.keyword": [escaped_cluster_value]}}
-                        ]
-                    }
-                },
-                "_source": ["reference_image_md5, type_ss"],
-                "size": 3
+                "filters": [
+                    collection.basic_filter, 
+                    {f"{facet}.keyword": [escaped_cluster_value]}
+                ],
+                "result_fields": ["reference_image_md5, type_ss"],
+                "rows": 3
             }
-            thumbs = ES_search(thumb_params)
+            thumbs = ES_search(query_encode(**thumb_params))
             value['thumbnails'] = thumbs.results
 
         context.update({
@@ -547,7 +518,7 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
     if cluster not in [f.facet for f in constants.UCLDC_SCHEMA_FACETS]:
         raise Http404("{} is not a valid facet".format(cluster))
 
-    form = CollectionForm(request, collection)
+    form = CollectionForm(request.GET.copy(), collection)
 
     parsed_cluster_value = urllib.parse.unquote_plus(cluster_value)
     escaped_cluster_value = solr_escape(parsed_cluster_value)
@@ -564,7 +535,7 @@ def collection_facet_value(request, collection_id, cluster, cluster_value):
         'search_results': results.results,
         'numFound': results.numFound,
         'pages': int(math.ceil(results.numFound / int(form.rows))),
-        'facets': form.get_facets(collection.filter),
+        'facets': form.get_facets(),
         'filters': form.filter_display(),
         'cluster': cluster,
         'cluster_value': parsed_cluster_value,
@@ -613,20 +584,14 @@ def collection_metadata(request, collection_id):
 def get_cluster_thumbnails(collection, facet, facet_value):
     escaped_cluster_value = solr_escape(facet_value)
     thumb_params = {
-        "query": {
-            "bool": {
-                "filter": [
-                    collection.filter,
-                    {"terms": {
-                        f'{facet.facet}.keyword': [escaped_cluster_value]
-                    }}
-                ]
-            }
-        },
-        "_source": ['reference_image_md5', 'type'],
-        "size": 3
+        'filters': [
+            collection.basic_filter,
+            {f'{facet.facet}.keyword': [escaped_cluster_value]}
+        ],
+        'result_fields': ['reference_image_md5', 'type'],
+        'rows': 3
     }
-    thumbs = ES_search(thumb_params)
+    thumbs = ES_search(query_encode(**thumb_params))
     return thumbs.results
 
 # average 'best case': http://127.0.0.1:8000/collections/27433/browse/
