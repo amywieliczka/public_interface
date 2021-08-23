@@ -12,6 +12,7 @@ from django.apps import apps
 from django.conf import settings
 from .temp import query_encode
 
+
 import math
 import re
 import string
@@ -40,9 +41,11 @@ def process_sort_collection_data(string):
 
 
 def campus_directory(request):
-    repositories_query = {"facets": ["repository_ids"]}
-    repositories_query = ES_search(**query_encode(repositories_query))
-    index_repositories = list(repositories_query.facet_counts['facet_fields'][
+    repo_query = {
+        "facets": ["repository_ids"]
+    }
+    repo_search = ES_search(**query_encode(repo_query))
+    index_repositories = list(repo_search.facet_counts['facet_fields'][
         'repository_ids'].keys())
 
     repositories = []
@@ -72,11 +75,11 @@ def campus_directory(request):
 
 
 def statewide_directory(request):
-    repositories_query = {
+    repo_query = {
         "facets": ["repository_ids"]
     }
-    repositories_query = ES_search(query_encode(**repositories_query))
-    index_repositories = list(repositories_query.facet_counts['facet_fields'][
+    repo_search = ES_search(query_encode(**repo_query))
+    index_repositories = list(repo_search.facet_counts['facet_fields'][
         'repository_ids'].keys())
 
     repositories = []
@@ -261,20 +264,12 @@ def institution_collections(request, institution):
     page = int(request.GET['page']) if 'page' in request.GET else 1
 
     collections_params = {
-        "query": institution.filter,
-        "size": 0,
-        "aggs": {
-            "collection_data": {
-                "terms": {
-                    "field": "collection_data.keyword",
-                    "order": {
-                        "_key": "asc"
-                    }
-                }
-            }
-        }
+        'filters': [institution.basic_filter],
+        'facets': ['collection_data'],
+        'facet_sort': {"_key": "asc"}
     }
-    collections_search = ES_search(collections_params)
+
+    collections_search = ES_search(query_encode(**collections_params))
     sort_collection_data = collections_search.facet_counts['facet_fields'][
         'collection_data']
 
@@ -283,7 +278,7 @@ def institution_collections(request, institution):
     # solrpy gives us a dict == unsorted (!)
     # use the `facet_decade` mode of process_facets to do a
     # lexical sort by value ....
-    col_fft = CollectionFF(request)
+    col_fft = CollectionFF(request.GET.copy())
     sort_collection_data = list(
         collection[0] for collection in
         col_fft.process_facets(sort_collection_data, 'value'))
@@ -413,7 +408,7 @@ def campus_institutions(request, campus_slug):
     institutions = institutions_search.facet_counts['facet_fields'][
         'repository_data']
 
-    repo_fft = RepositoryFF(request)
+    repo_fft = RepositoryFF(request.GET.copy())
 
     related_institutions = list(
         institution[0] for institution in

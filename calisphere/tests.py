@@ -248,27 +248,30 @@ class InstitutionQueriesTestCase(unittest.TestCase):
         }
         self.assertEqual(es_params, repositories_query)
 
-    # def test_institution_collections(self):
-    #     institution = Repository(25)
-    #     es_params = {
-    #         'filters': institution.basic_filter,
-    #         'facets': ['collection_data']
-    #     }
-    #     collections_params = {
-    #         "query": institution.filter,
-    #         "size": 0,
-    #         "aggs": {
-    #             "collection_data": {
-    #                 "terms": {
-    #                     "field": "collection_data.keyword",
-    #                     "order": {
-    #                         "_key": "asc"
-    #                     }
-    #                 }
-    #             }
-    #         }
-    #     }
-    #     self.assertEqual(es_params, collections_params)
+    def test_institution_collections(self):
+        institution = Repository(25)
+        es_params = {
+            'filters': [institution.basic_filter],
+            'facets': ['collection_data'],
+            'facet_sort': {"_key": "asc"}
+        }
+        es_params = query_encode(**es_params)
+        collections_params = {
+            "query": institution.filter,
+            "size": 0,
+            "aggs": {
+                "collection_data": {
+                    "terms": {
+                        "field": "collection_data.keyword",
+                        "size": 10000,
+                        "order": {
+                            "_key": "asc"
+                        }
+                    }
+                }
+            }
+        }
+        self.assertEqual(es_params, collections_params)
 
     def test_campus_institutions(self):
         institution = Campus('UCI')

@@ -14,7 +14,8 @@ def query_encode(query_string: str = None,
                  start: int = None,
                  rows: int = 0,
                  result_fields: List[str] = None,
-                 facets: List[str] = None):
+                 facets: List[str] = None,
+                 facet_sort: dict = None):
 
     es_params = {}
 
@@ -70,6 +71,9 @@ def query_encode(query_string: str = None,
                     "size": 10000
                 }
             }
+
+            if facet_sort:
+                aggs[facet]["terms"]["order"] = facet_sort
         # regarding 'size' parameter here and getting back all the facet values
         # please see: https://github.com/elastic/elasticsearch/issues/18838
 

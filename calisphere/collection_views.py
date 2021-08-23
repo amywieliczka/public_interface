@@ -187,11 +187,12 @@ class Collection(object):
     def get_item_count(self):
         if hasattr(self, 'item_count'):
             return self.item_count
-        es_params = {
+
+        item_query = {
             "filters": [self.basic_filter],
             "rows": 0
         }
-        item_count_search = ES_search(query_encode(**es_params))
+        item_count_search = ES_search(query_encode(**item_query))
         self.item_count = item_count_search.numFound
         return self.item_count
 
@@ -228,14 +229,14 @@ class Collection(object):
         return facet_sets
 
     def get_facets(self, facet_fields):
-        es_params = {
+        facet_query = {
             "filters": [self.basic_filter],
             "rows": 0,
             "facets": [ff.facet for ff in facet_fields]
         }
-        facet_search = ES_search(query_encode(**es_params))
+        facet_search = ES_search(query_encode(**facet_query))
         self.item_count = facet_search.numFound
-        
+
         facets = []
         for facet_field in facet_fields:
             values = facet_search.facet_counts.get('facet_fields').get(
@@ -290,7 +291,6 @@ class Collection(object):
             "rows": 6,
             "start": 0
         }
-
         display_items = ES_search(query_encode(**search_terms))
         items = display_items.results
 
@@ -315,6 +315,7 @@ class Collection(object):
 
     def get_lockup(self, keyword_query):
         rc_params = {
+            'query_string': keyword_query,
             'filters': [self.basic_filter],
             'result_fields': [
                 "reference_image_md5",
@@ -328,9 +329,6 @@ class Collection(object):
             "rows": 3,
             "start": 0
         }
-
-        if keyword_query:
-            rc_params['query_string'] = keyword_query
 
         collection_items = ES_search(query_encode(**rc_params))
         collection_items = collection_items.results
