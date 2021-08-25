@@ -218,9 +218,12 @@ class CollectionForm(SearchForm):
     ]
 
     def __init__(self, request, collection):
-        self.collection = collection
-        self.facet_filter_fields += collection.custom_facets
         super().__init__(request)
+
+        self.collection = collection
+        self.facet_filter_types += [
+            ff_field(request) for ff_field in collection.custom_facets
+        ]
 
         # If relation_ss is not already defined as a custom facet, and is
         # included in search parameters, add the relation_ss facet implicitly
@@ -230,6 +233,47 @@ class CollectionForm(SearchForm):
             if request.get('relation_ss'):
                 self.facet_filter_types.append(ff.RelationFF(request))
         self.implicit_filter = collection.basic_filter
+
+
+class CarouselForm(SearchForm):
+    def query_encode(self, facet_types=[]):
+        carousel_params = super().query_encode(facet_types)
+        carousel_params.pop('aggs')
+        carousel_params['_source'] = [
+            'calisphere-id',
+            'type',
+            'reference_image_md5',
+            'title'
+        ]
+        filters = [ft.basic_query for ft in self.facet_filter_types
+                   if ft.basic_query]
+        self.filter_query = bool(filters)
+        return carousel_params
+
+
+class CollectionCarouselForm(CarouselForm):
+    def __init__(self, request, collection):
+        super().__init__(request)
+
+        self.collection = collection
+        self.facet_filter_types += [
+            ff_field(request) for ff_field in collection.custom_facets
+        ]
+
+        # If relation_ss is not already defined as a custom facet, and is
+        # included in search parameters, add the relation_ss facet implicitly
+        # this is a bit crude and assumes if any custom facets, relation_ss 
+        # is a custom facet
+        if not collection.custom_facets:
+            if request.get('relation_ss'):
+                self.facet_filter_types.append(ff.RelationFF(request))
+
+
+class CampusCarouselForm(CarouselForm):
+    def __init__(self, request, campus):
+        super().__init__(request)
+        self.institution = campus
+        self.implicit_filter = campus.basic_filter
 
 
 class AltSortField(SortField):

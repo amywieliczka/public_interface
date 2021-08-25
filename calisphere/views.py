@@ -5,10 +5,13 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
+
 from .cache_retry import SOLR_raw, json_loads_url, ES_get, ES_search
-from .search_form import SearchForm, solr_escape, CollectionFacetValueForm
+from .search_form import (SearchForm, solr_escape, CollectionFacetValueForm,
+                          CarouselForm, CollectionCarouselForm, 
+                          CampusCarouselForm, CampusForm, RepositoryForm)
 from .collection_views import Collection, get_rc_from_ids
-from .institution_views import Repository
+from .institution_views import Repository, Campus
 from .facet_filter_type import CollectionFF
 from static_sitemaps.util import _lazy_load
 from static_sitemaps import conf
@@ -327,53 +330,23 @@ def item_view_carousel(request):
 
     referral = request.GET.get('referral')
     link_back_id = ''
-    extra_filter = None
-    form = SearchForm(request.GET.copy())
+    form = CarouselForm(request.GET.copy())
 
     if referral == 'institution':
         link_back_id = request.GET.get('repository_data', None)
     if referral == 'collection':
         link_back_id = request.GET.get('collection_data', None)
-        # get any collection-specific facets
         collection = Collection(link_back_id)
-        custom_facets = collection.custom_facets
-        form.facet_filter_types += custom_facets
-        # # Add Custom Facet Filter Types
-        if request.GET.get('relation_ss') and len(custom_facets) == 0:
-            form.facet_filter_types.append(
-                facet_module.RelationFF(request)
-            )
+        form = CollectionCarouselForm(request.GET.copy(), collection)
     if referral == 'campus':
         link_back_id = request.GET.get('campus_slug', None)
-        if link_back_id:
-            campus = [c for c in constants.CAMPUS_LIST
-                      if c['slug'] == link_back_id][0]
-            extra_filter = {'campus_ids': [campus['id']]}
+        form = CampusCarouselForm(request.GET.copy(), Campus(link_back_id))
 
     carousel_params = form.query_encode()
-    if extra_filter:
-        (carousel_params.get('query')
-            .get('bool')
-            .get('filter')
-            .append({
-                "terms": extra_filter
-            }))
-
     # if no query string or filters, do a "more like this" search
-    if form.query_string == '' and len(
-      carousel_params['query']['bool']['filter']) == 0:
+    if not form.query_string and not form.filter_query:
         search_results, num_found = item_view_carousel_mlt(item_id)
     else:
-        carousel_params.pop('aggs')
-        carousel_params['_source'] = [
-            'calisphere-id',
-            'type',
-            'reference_image_md5',
-            'title'
-        ]
-        if carousel_params.get('from') == 'NaN':
-            carousel_params['from'] = 0
-
         try:
             carousel_search = ES_search(carousel_params)
         except HTTPError as e:
@@ -385,11 +358,9 @@ def item_view_carousel(request):
 
     if request.GET.get('init'):
         context = form.context()
-        context['start'] = carousel_params[
-            'from'] if carousel_params['from'] != 'NaN' else 0
-        context['filters'] = form.filter_display()
 
         context.update({
+            'filters': form.filter_display(),
             'numFound': num_found,
             'search_results': search_results,
             'item_id': item_id,
@@ -414,35 +385,16 @@ campus_template = "https://registry.cdlib.org/api/v1/campus/{0}/"
 repo_template = "https://registry.cdlib.org/api/v1/repository/{0}/"
 
 
-def get_related_collections(request, slug=None, repository_id=None):
+def get_related_collections(request):
     form = SearchForm(request.GET.copy())
     field = CollectionFF(request)
 
-    rc_params = form.query_encode([field])
-    rc_params['size'] = 0
-
     if request.GET.get('campus_slug'):
         slug = request.GET.get('campus_slug')
+        form = CampusForm(request.GET.copy(), Campus(slug))
 
-    if slug:
-        campus = [c for c in constants.CAMPUS_LIST if c['slug'] == slug][0]
-        (rc_params.get('query')
-            .get('bool')
-            .get('filter')
-            .append({
-                "terms": {
-                    "campus_ids": [campus['id']]
-                }
-            }))
-    if repository_id:
-        (rc_params.get('query')
-            .get('bool')
-            .get('filter')
-            .append({
-                "terms": {
-                    "repository_ids": [repository_id]
-                }
-            }))
+    rc_params = form.query_encode([field])
+    rc_params['rows'] = 0
 
     # mlt search (TODO, need to actually make MLT?)
     if len(form.query_string) == 0 and len(
@@ -483,9 +435,8 @@ def get_related_collections(request, slug=None, repository_id=None):
     return three_related_collections, len(related_collections)
 
 
-def related_collections(request, slug=None, repository_id=None):
-    three_rcs, num_related_collections = get_related_collections(
-        request, slug, repository_id)
+def related_collections(request):
+    three_rcs, num_related_collections = get_related_collections(request)
 
     params = request.GET.copy()
     context = {
