@@ -2,7 +2,7 @@ from .cache_retry import ES_search
 from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
-from .temp import query_encode as es_query_encode
+from .temp import query_encode as index_query_encode
 import json 
 
 
@@ -99,14 +99,13 @@ class SearchForm(object):
             raise Http404("{0} does not exist".format(err))
 
         sort = constants.SORT_OPTIONS[self.sort]
-        print(f'ToDo: add sort: {sort}')
 
         if len(facet_types) == 0:
             facet_types = self.facet_filter_types
 
         index_query = {
             "query_string": self.query_string,
-            "filters": [ft.basic_query for ft in self.facet_filter_types 
+            "filters": [ft.basic_query for ft in self.facet_filter_types
                         if ft.basic_query],
             "rows": rows,
             "start": start,
@@ -114,9 +113,9 @@ class SearchForm(object):
             "facets": [ft.facet_field for ft in facet_types]
         }
         if self.implicit_filter:
-            index_query['filters'].append(self.basic_implicit_filter)
+            index_query['filters'].append(self.implicit_filter)
 
-        new_query = es_query_encode(**index_query)
+        new_query = index_query_encode(**index_query)
 
         # query_fields = self.request.get('qf')
         # if query_fields:
@@ -146,7 +145,7 @@ class SearchForm(object):
                     (facet_params.get('query')
                         .get('bool')
                         .get('filter')
-                        .append(self.implicit_filter))
+                        .append({"terms": self.implicit_filter}))
 
                 facet_search = ES_search(facet_params)
 
@@ -196,7 +195,7 @@ class CampusForm(SearchForm):
     def __init__(self, request, campus):
         super().__init__(request)
         self.institution = campus
-        self.implicit_filter = campus.filter
+        self.implicit_filter = campus.basic_filter
 
 
 class RepositoryForm(SearchForm):
@@ -209,7 +208,7 @@ class RepositoryForm(SearchForm):
     def __init__(self, request, institution):
         super().__init__(request)
         self.institution = institution
-        self.implicit_filter = institution.filter
+        self.implicit_filter = institution.basic_filter
 
 
 class CollectionForm(SearchForm):
@@ -228,7 +227,6 @@ class CollectionForm(SearchForm):
         # this is a bit crude and assumes if any custom facets, relation_ss 
         # is a custom facet
         if not collection.custom_facets:
-
             if request.get('relation_ss'):
                 self.facet_filter_types.append(ff.RelationFF(request))
         self.implicit_filter = collection.basic_filter
