@@ -3,14 +3,14 @@ from django.shortcuts import render
 from django.urls import reverse
 from django.http import Http404
 from . import constants
-from .cache_retry import json_loads_url, ES_search
+from .cache_retry import json_loads_url
 from .search_form import CampusForm, RepositoryForm
 from .collection_views import Collection, get_rc_from_ids
 from .facet_filter_type import (
     CollectionFF, RepositoryFF)
 from django.apps import apps
 from django.conf import settings
-from .temp import query_encode
+from .temp import search_index
 
 
 import math
@@ -44,9 +44,9 @@ def campus_directory(request):
     repo_query = {
         "facets": ["repository_ids"]
     }
-    repo_search = ES_search(**query_encode(repo_query))
-    index_repositories = list(repo_search.facet_counts['facet_fields'][
-        'repository_ids'].keys())
+    repo_search = search_index(repo_query)
+    index_repositories = repo_search.facet_counts['facet_fields'][
+        'repository_ids']
 
     repositories = []
     for repo_id in index_repositories:
@@ -78,9 +78,9 @@ def statewide_directory(request):
     repo_query = {
         "facets": ["repository_ids"]
     }
-    repo_search = ES_search(query_encode(**repo_query))
-    index_repositories = list(repo_search.facet_counts['facet_fields'][
-        'repository_ids'].keys())
+    repo_search = search_index(repo_query)
+    index_repositories = repo_search.facet_counts['facet_fields'][
+        'repository_ids']
 
     repositories = []
     for repo_id in index_repositories:
@@ -269,7 +269,7 @@ def institution_collections(request, institution):
         'facet_sort': {"_key": "asc"}
     }
 
-    collections_search = ES_search(query_encode(**collections_params))
+    collections_search = search_index(collections_params)
     sort_collection_data = collections_search.facet_counts['facet_fields'][
         'collection_data']
 
@@ -282,6 +282,7 @@ def institution_collections(request, institution):
     sort_collection_data = list(
         collection[0] for collection in
         col_fft.process_facets(sort_collection_data, 'value'))
+
     start = ((page-1) * 10)
     end = page * 10
     sort_collection_data = sort_collection_data[start:end]
@@ -404,7 +405,7 @@ def campus_institutions(request, campus_slug):
         'filters': [institution.basic_filter],
         'facets': ['repository_data']
     }
-    institutions_search = ES_search(query_encode(**institutions_query))
+    institutions_search = search_index(institutions_query)
     institutions = institutions_search.facet_counts['facet_fields'][
         'repository_data']
 
