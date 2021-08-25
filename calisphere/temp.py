@@ -1,4 +1,6 @@
 from typing import Dict, List, Tuple
+from .cache_retry import ES_search
+
 
 FieldName = str
 Order = str
@@ -93,3 +95,7 @@ def query_encode(query_string: str = None,
     if start:
         es_params.update({'from': start})
     return es_params
+
+
+def search_index(query):
+    return ES_search(query_encode(**query))

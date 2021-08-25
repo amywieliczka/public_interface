@@ -104,19 +104,19 @@ class SearchForm(object):
         if len(facet_types) == 0:
             facet_types = self.facet_filter_types
 
-        es_query_new = {
+        index_query = {
             "query_string": self.query_string,
             "filters": [ft.basic_query for ft in self.facet_filter_types 
                         if ft.basic_query],
             "rows": rows,
             "start": start,
-            # "sort": tuple(sort.split(' ')),
+            "sort": tuple(sort.split(' ')),
             "facets": [ft.facet_field for ft in facet_types]
         }
         if self.implicit_filter:
-            es_query_new['filters'].append(self.basic_implicit_filter)
+            index_query['filters'].append(self.basic_implicit_filter)
 
-        new_query = es_query_encode(**es_query_new)
+        new_query = es_query_encode(**index_query)
 
         # query_fields = self.request.get('qf')
         # if query_fields:
@@ -219,19 +219,19 @@ class CollectionForm(SearchForm):
     ]
 
     def __init__(self, request, collection):
-        super().__init__(request)
         self.collection = collection
-        facet_filter_types = self.facet_filter_types
-        facet_filter_types += collection.custom_facets
+        self.facet_filter_fields += collection.custom_facets
+        super().__init__(request)
+
         # If relation_ss is not already defined as a custom facet, and is
         # included in search parameters, add the relation_ss facet implicitly
         # this is a bit crude and assumes if any custom facets, relation_ss 
         # is a custom facet
         if not collection.custom_facets:
-            if self.request.get('relation_ss'):
-                facet_filter_types.append(ff.RelationFF(request))
-        self.facet_filter_types = facet_filter_types
-        self.implicit_filter = collection.filter
+
+            if request.get('relation_ss'):
+                self.facet_filter_types.append(ff.RelationFF(request))
+        self.implicit_filter = collection.basic_filter
 
 
 class AltSortField(SortField):
