@@ -5,7 +5,6 @@ from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
 from . import facet_filter_type as facet_module
-
 from .cache_retry import SOLR_raw, json_loads_url, ES_get, ES_search
 from .search_form import (SearchForm, solr_escape, CollectionFacetValueForm,
                           CarouselForm, CollectionCarouselForm, 
@@ -345,11 +344,11 @@ def item_view_carousel(request):
     carousel_params = form.query_encode()
 
     # if no query string or filters, do a "more like this" search
-    if not form.query_string and not form.filter_query:
+    if not form.query_string and not carousel_params.get('filters'):
         search_results, num_found = item_view_carousel_mlt(item_id)
     else:
         try:
-            carousel_search = ES_search(carousel_params)
+            carousel_search = ES_search(query_encode(**carousel_params))
         except HTTPError as e:
             # https://stackoverflow.com/a/19384641/1763984
             print((request.get_full_path()))
@@ -395,23 +394,15 @@ def get_related_collections(request):
         form = CampusForm(request.GET.copy(), Campus(slug))
 
     rc_params = form.query_encode([field])
-    rc_params['size'] = 0
+    rc_params['rows'] = 0
 
     # mlt search (TODO, need to actually make MLT?)
-    if not rc_params.get('query'):
+    if not form.query_string and not rc_params.get('filters'):
         if request.GET.get('itemId'):
-            rc_params['query'] = {
-                "bool": {
-                    "must": [{
-                        "query_string": {
-                            "query": request.GET.get('itemId', ''),
-                            "fields": ["calisphere-id"]
-                        }
-                    }]
-                }
-            }
+            rc_params['query_string'] = (
+                f"calisphere-id: {request.GET.get('itemId')}")
 
-    related_collections = ES_search(rc_params)
+    related_collections = ES_search(query_encode(**rc_params))
     related_collections = related_collections.facet_counts['facet_fields'][
         CollectionFF.facet_field]
 
@@ -538,17 +529,14 @@ def report_collection_facet_value(request, collection_id, facet, facet_value):
 
     form = CollectionFacetValueForm(request.GET.copy(), collection)
     filter_params = form.query_encode()
-    if filter_params.query_string:
-        (filter_params['query']['bool']['must'][0]['query_string']
-            ['query']) += f" AND ({facet}:\"{escaped_facet_value}\")"
-    else:
-        filter_params['query']['bool'].update({
-            "must": [{
-                "query_string": f"{facet}:\"{escaped_facet_value}\""
-            }]
-        })
+    query_string = f"{facet}:\"{escaped_facet_value}\""
 
-    filter_search = ES_search(filter_params)
+    if form.query_string:
+        filter_params['query_string'] += f" AND ({query_string})"
+    else:
+        filter_params['query_string'] = query_string
+
+    filter_search = ES_search(query_encode(**filter_params))
 
     collection_name = collection_details.get('name')
 

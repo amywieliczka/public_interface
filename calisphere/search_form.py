@@ -115,13 +115,11 @@ class SearchForm(object):
         if self.implicit_filter:
             index_query['filters'].append(self.implicit_filter)
 
-        new_query = index_query_encode(**index_query)
-
         # query_fields = self.request.get('qf')
         # if query_fields:
         #     solr_query.update({'qf': query_fields})
 
-        return new_query
+        return index_query
 
     def get_facets(self):
         # get facet counts
@@ -142,12 +140,9 @@ class SearchForm(object):
                 fft.basic_query = exclude_filter
 
                 if self.implicit_filter:
-                    (facet_params.get('query')
-                        .get('bool')
-                        .get('filter')
-                        .append({"terms": self.implicit_filter}))
+                    facet_params['filters'].append(self.implicit_filter)
 
-                facet_search = ES_search(facet_params)
+                facet_search = ES_search(index_query_encode(**facet_params))
 
                 self.facets[fft.facet_field] = (
                     facet_search.facet_counts['facet_fields']
@@ -166,14 +161,9 @@ class SearchForm(object):
     def search(self, extra_filter=None):
         query = self.query_encode()
         if extra_filter:
-            (query.get('query')
-                .get('bool')
-                .get('filter')
-                .append({
-                    "terms": extra_filter
-                }))
+            query['filters'].append(extra_filter)
 
-        results = ES_search(query)
+        results = ES_search(index_query_encode(**query))
 
         self.facets = results.facet_counts['facet_fields']
         return results
@@ -238,8 +228,8 @@ class CollectionForm(SearchForm):
 class CarouselForm(SearchForm):
     def query_encode(self, facet_types=[]):
         carousel_params = super().query_encode(facet_types)
-        carousel_params.pop('aggs')
-        carousel_params['_source'] = [
+        carousel_params.pop('facets')
+        carousel_params['result_fields'] = [
             'calisphere-id',
             'type',
             'reference_image_md5',
