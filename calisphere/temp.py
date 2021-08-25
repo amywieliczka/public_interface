@@ -84,12 +84,12 @@ def query_encode(query_string: str = None,
     if result_fields:
         es_params.update({"_source": result_fields})
 
-    if sort:
-        es_params.update({
-            "sort": [{
-                sort[0]: {"order": sort[1]}
-            }]
-        })
+    # if sort:
+    #     es_params.update({
+    #         "sort": [{
+    #             sort[0]: {"order": sort[1]}
+    #         }]
+    #     })
     
     es_params.update({'size': rows})
     if start:

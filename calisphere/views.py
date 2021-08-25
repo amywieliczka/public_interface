@@ -343,6 +343,7 @@ def item_view_carousel(request):
         form = CampusCarouselForm(request.GET.copy(), Campus(link_back_id))
 
     carousel_params = form.query_encode()
+
     # if no query string or filters, do a "more like this" search
     if not form.query_string and not form.filter_query:
         search_results, num_found = item_view_carousel_mlt(item_id)
@@ -387,29 +388,28 @@ repo_template = "https://registry.cdlib.org/api/v1/repository/{0}/"
 
 def get_related_collections(request):
     form = SearchForm(request.GET.copy())
-    field = CollectionFF(request)
+    field = CollectionFF(request.GET.copy())
 
     if request.GET.get('campus_slug'):
         slug = request.GET.get('campus_slug')
         form = CampusForm(request.GET.copy(), Campus(slug))
 
     rc_params = form.query_encode([field])
-    rc_params['rows'] = 0
+    rc_params['size'] = 0
 
     # mlt search (TODO, need to actually make MLT?)
-    if len(form.query_string) == 0 and len(
-      rc_params['query']['bool']['filter']) == 0:
+    if not rc_params.get('query'):
         if request.GET.get('itemId'):
-            (rc_params.get('query')
-                .get('bool')
-                .update({
+            rc_params['query'] = {
+                "bool": {
                     "must": [{
                         "query_string": {
                             "query": request.GET.get('itemId', ''),
                             "fields": ["calisphere-id"]
                         }
                     }]
-                }))
+                }
+            }
 
     related_collections = ES_search(rc_params)
     related_collections = related_collections.facet_counts['facet_fields'][
