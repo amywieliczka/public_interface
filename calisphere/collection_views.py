@@ -298,7 +298,6 @@ class Collection(object):
         search_terms['exclude'] = [{TypeFF.filter_field: ["image"]}]
 
         ugly_display_items = search_index(search_terms)
-
         # if there's not enough image items, get some non-image
         # items for the mosaic preview
         if len(items) < 6:
