@@ -420,7 +420,7 @@ def get_related_collections(request):
 
         col_id = related_collections[i].split('::')[0]
         collection = Collection(col_id)
-        lockup_data = collection.get_lockup(form.query_string)
+        lockup_data = collection.get_lockup(rc_params['query_string'])
         three_related_collections.append(lockup_data)
 
     return three_related_collections, len(related_collections)
@@ -480,14 +480,12 @@ def report_collection_facet(request, collection_id, facet):
         repository['resource_id'] = repository.get('resource_uri').split(
             '/')[-2]
 
-    es_params = {
+    facet_params = {
         "filters": [{'collection_ids': [collection_id]}],
         "facets": [facet]
     }
 
-    # regarding 'size' parameter here and getting back all the facet values
-    # please see: https://github.com/elastic/elasticsearch/issues/18838
-    facet_search = ES_search(query_encode(**es_params))
+    facet_search = ES_search(query_encode(**facet_params))
 
     values = facet_search.facet_counts.get(
         'facet_fields').get('{}'.format(facet))
