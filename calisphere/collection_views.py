@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import Http404, JsonResponse
 from calisphere.collection_data import CollectionManager
 from . import constants
-from .facet_filter_type import FacetFilterType
+from .facet_filter_type import FacetFilterType, TypeFF
 from .cache_retry import json_loads_url
 from .search_form import CollectionForm, solr_escape
 from builtins import range
@@ -135,7 +135,6 @@ class Collection(object):
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
         self.basic_filter = {'collection_ids': [self.id]}
-        self.filter = {'terms': {'collection_ids': [self.id]}}
 
     def _parse_custom_facets(self):
         custom_facets = []
@@ -279,7 +278,7 @@ class Collection(object):
         search_terms = {
             "filters": [
                 self.basic_filter,
-                {"type.keyword": ["image"]}
+                {TypeFF.filter_field: ["image"]}
             ],
             "result_fields": [
                 "reference_image_md5",
@@ -296,8 +295,8 @@ class Collection(object):
         items = display_items.results
 
         search_terms['filters'].pop(1)
-        search_terms['exclude'] = [{"type.keyword": ["image"]}]
-        
+        search_terms['exclude'] = [{TypeFF.filter_field: ["image"]}]
+
         ugly_display_items = search_index(search_terms)
 
         # if there's not enough image items, get some non-image

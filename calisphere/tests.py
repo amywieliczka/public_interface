@@ -19,7 +19,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
         }
         es_params = query_encode(**es_params)
         manual_params = {
-            "query": collection.filter,
+            "query": {'terms': {'collection_ids': [collection.id]}},
             "size": 0
         }
         self.assertEqual(es_params, manual_params)
@@ -34,7 +34,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
         }
         encoded = query_encode(**es_params)
         manual_params = {
-            "query": collection.filter,
+            "query": {'terms': {'collection_ids': [collection.id]}},
             "size": 0,
             "aggs": {}
         }
@@ -71,7 +71,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             "query": {
                 "bool": {
                     "filter": [
-                        collection.filter, 
+                        {'terms': {'collection_ids': [collection.id]}} 
                         {"terms": {"type.keyword": ["image"]}}
                     ]
                 }
@@ -117,7 +117,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
         }
         es_params_encoded = query_encode(**es_params)
         rc_params = {
-            "query": collection.filter,
+            "query": {'terms': {'collection_ids': [collection.id]}},
             "_source": [
                 "reference_image_md5", 
                 "url_item", 
@@ -143,7 +143,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
                         "query": keyword_query
                     }
                 }],
-                "filter": [collection.filter]
+                "filter": [{'terms': {'collection_ids': [collection.id]}}]
             }
         }
         rc_params['query'] = es_query_string
@@ -151,7 +151,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
 
         es_params.pop('query_string')
         es_params_encoded = query_encode(**es_params)
-        rc_params['query'] = collection.filter
+        rc_params['query'] = {'terms': {'collection_ids': [collection.id]}}
         self.assertEqual(es_params_encoded, rc_params)
 
     def test_collection_facet_thumb_params(self):
@@ -171,7 +171,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
                 "query": {
                     "bool": {
                         "filter": [
-                            collection.filter,
+                            {'terms': {'collection_ids': [collection.id]}},
                             {"terms": {f"{facet}.keyword": [escaped_cluster_value]}}
                         ]
                     }
@@ -198,7 +198,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             "query": {
                 "bool": {
                     "filter": [
-                        collection.filter,
+                        {'terms': {'collection_ids': [collection.id]}},
                         {"terms": {
                             f'{facet}.keyword': [escaped_cluster_value]
                         }}
