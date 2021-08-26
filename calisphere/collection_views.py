@@ -160,14 +160,16 @@ class Collection(object):
         return custom_facets
 
     def _generate_custom_schema_facets(self):
-        custom_schema_facets = [fd for fd in constants.UCLDC_SCHEMA_FACETS
+        custom_schema_facets = [fd for fd in constants.UCLDC_ES_SCHEMA_FACETS
                                 if fd.facet != 'spatial']
+
+        # Use a registry-specified display name over constants.py display name
         if self.custom_facets:
             for custom in self.custom_facets:
                 for i, facet in enumerate(custom_schema_facets):
-                    if custom.facet_field == f"{facet.facet}.keyword":
-                        custom_schema_facets[i] = constants.FacetDisplay(
-                            facet.facet, custom.display_name)
+                    if custom.facet_field == facet.field:
+                        custom_schema_facets[i] = constants.FacetDisplayField(
+                            facet.facet, custom.display_name, facet.field)
         return custom_schema_facets
 
     def get_summary_data(self):
@@ -233,7 +235,7 @@ class Collection(object):
         facet_query = {
             "filters": [self.basic_filter],
             "rows": 0,
-            "facets": [ff.facet for ff in facet_fields]
+            "facets": [ff.field for ff in facet_fields]
         }
         facet_search = search_index(facet_query)
         self.item_count = facet_search.numFound
@@ -241,7 +243,7 @@ class Collection(object):
         facets = []
         for facet_field in facet_fields:
             values = facet_search.facet_counts.get('facet_fields').get(
-                facet_field.facet)
+                facet_field.field)
             if not values:
                 facets.append(None)
 
@@ -501,7 +503,10 @@ def collection_facet_json(request, collection_id, facet):
         raise Http404("{} is not a valid facet".format(facet))
 
     collection = Collection(collection_id)
-    facets = collection.get_facets([constants.FacetDisplay(facet, 'json')])[0]
+    facet_type = [tup for tup in collection.custom_schema_facets
+                  if tup.facet == facet][0]
+
+    facets = collection.get_facets([facet_type])[0]
     if not facets:
         raise Http404("{0} has no facet values".format(facet))
 
