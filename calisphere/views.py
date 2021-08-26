@@ -483,7 +483,6 @@ def report_collection_facet(request, collection_id, facet):
         "filters": [{'collection_ids': [collection_id]}],
         "facets": [facet]
     }
-
     facet_search = search_index(facet_params)
 
     values = facet_search.facet_counts.get(
