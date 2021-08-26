@@ -134,7 +134,6 @@ class Collection(object):
         self.custom_facets = self._parse_custom_facets()
         self.custom_schema_facets = self._generate_custom_schema_facets()
 
-
         self.basic_filter = {CollectionFF.filter_field: [self.id]}
 
     def _parse_custom_facets(self):
