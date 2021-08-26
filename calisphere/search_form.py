@@ -1,8 +1,7 @@
-from .cache_retry import ES_search
 from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
-from .temp import query_encode as index_query_encode
+from .temp import search_index
 
 
 def solr_escape(text):
@@ -141,7 +140,7 @@ class SearchForm(object):
                 if self.implicit_filter:
                     facet_params['filters'].append(self.implicit_filter)
 
-                facet_search = ES_search(index_query_encode(**facet_params))
+                facet_search = search_index(facet_params)
 
                 self.facets[fft.facet_field] = (
                     facet_search.facet_counts['facet_fields']
@@ -162,7 +161,7 @@ class SearchForm(object):
         if extra_filter:
             query['filters'].append(extra_filter)
 
-        results = ES_search(index_query_encode(**query))
+        results = search_index(query)
         self.facets = results.facet_counts['facet_fields']
         return results
 
