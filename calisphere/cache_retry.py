@@ -52,6 +52,13 @@ def ES_search(body):
     for item in results['hits']['hits']:
         item['id'] = item['_id']
 
+    for result in results['hits']['hits']:
+        metadata = result.pop('_source')
+        metadata['title'] = [metadata['title']]
+        metadata['type'] = [metadata['type']]
+        metadata['type_ss'] = [metadata['type']]
+        result.update(metadata)
+
     results = ESResults(
         results['hits']['hits'],
         results['hits']['total']['value'],
