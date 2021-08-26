@@ -3,7 +3,6 @@ from . import constants
 from django.http import Http404
 from . import facet_filter_type as ff
 from .temp import query_encode as index_query_encode
-import json 
 
 
 def solr_escape(text):
@@ -164,7 +163,6 @@ class SearchForm(object):
             query['filters'].append(extra_filter)
 
         results = ES_search(index_query_encode(**query))
-
         self.facets = results.facet_counts['facet_fields']
         return results
 
@@ -235,9 +233,7 @@ class CarouselForm(SearchForm):
             'reference_image_md5',
             'title'
         ]
-        filters = [ft.basic_query for ft in self.facet_filter_types
-                   if ft.basic_query]
-        self.filter_query = bool(filters)
+        self.filter_query = bool(carousel_params.get('filters'))
         return carousel_params
 
 
