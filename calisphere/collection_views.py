@@ -590,7 +590,7 @@ def get_cluster_thumbnails(collection, facet, facet_value):
     thumb_params = {
         'filters': [
             collection.basic_filter,
-            {f'{facet.facet}.keyword': [escaped_cluster_value]}
+            {facet.field: [escaped_cluster_value]}
         ],
         'result_fields': ['reference_image_md5', 'type'],
         'rows': 3
