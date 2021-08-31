@@ -62,7 +62,7 @@ def query_encode(query_string: str = None,
         exceptions = ['collection_ids', 'repository_ids', 'campus_ids']
         aggs = {}
         for facet in facets:
-            if facet in exceptions:
+            if facet in exceptions or facet[-8:] == '.keyword':
                 field = facet
             else:
                 field = f'{facet}.keyword'
