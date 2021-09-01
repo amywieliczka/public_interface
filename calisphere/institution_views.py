@@ -263,13 +263,13 @@ def institution_collections(request, institution):
 
     collections_params = {
         'filters': [institution.basic_filter],
-        'facets': ['collection_data'],
+        'facets': ['sort_collection_data'],
         'facet_sort': {"_key": "asc"}
     }
 
     collections_search = search_index(collections_params)
     sort_collection_data = collections_search.facet_counts['facet_fields'][
-        'collection_data']
+        'sort_collection_data']
 
     pages = int(math.ceil(len(sort_collection_data) / 10))
 
@@ -289,7 +289,7 @@ def institution_collections(request, institution):
     for i, related_collection in enumerate(sort_collection_data):
         collection_parts = process_sort_collection_data(
             related_collection)
-        col_id = collection_parts[0]
+        col_id = collection_parts[2]
         try:
             related_collections.append(
                 Collection(col_id).get_mosaic())
