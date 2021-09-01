@@ -8,13 +8,12 @@ import urllib.request, urllib.error, urllib.parse
 from collections import namedtuple
 import string
 import random
-from .cache_retry import json_loads_url, ES_search
+from .cache_retry import json_loads_url
 from .temp import search_index
 from django.core.cache import cache
 from django.conf import settings
 import time
 import re
-from .temp import query_encode
 
 CollectionLink = namedtuple('CollectionLink', 'url, label, id')
 
