@@ -312,7 +312,8 @@ def item_view_carousel_mlt(item_id):
         mlt_mintf=1,
     )
     if json.loads(carousel_solr_search)['response']['numFound'] == 0:
-        raise Http404('No object with id "' + item_id + '" found.')
+        return None, None
+        # raise Http404('No object with id "' + item_id + '" found.')
     search_results = json.loads(
         carousel_solr_search)['response']['docs'] + json.loads(
             carousel_solr_search)['moreLikeThis'][item_id]['docs']
@@ -399,7 +400,7 @@ def get_related_collections(request):
     if not form.query_string and not rc_params.get('filters'):
         if request.GET.get('itemId'):
             rc_params['query_string'] = form.query_string = (
-                f"calisphere-id: {request.GET.get('itemId')}")
+                f"id:{request.GET.get('itemId')}")
 
     related_collections = search_index(rc_params)
     related_collections = related_collections.facet_counts['facet_fields'][

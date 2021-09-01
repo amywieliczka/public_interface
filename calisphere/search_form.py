@@ -213,7 +213,7 @@ class CarouselForm(SearchForm):
         carousel_params = super().get_query(facet_types)
         carousel_params.pop('facets')
         carousel_params['result_fields'] = [
-            'calisphere-id',
+            'id',
             'type',
             'reference_image_md5',
             'title'

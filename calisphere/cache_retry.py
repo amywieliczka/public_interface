@@ -77,7 +77,8 @@ def ES_get(item_id):
     item.pop('word_bucket')
     item['title'] = [item['title']]
     item['type'] = [item['type']]
-    item['id'] = item['calisphere-id']
+    item['source'] = [item['source']]
+    item['location'] = [item['location']]
 
     results = ESItem(found, item, item_search)
     return results

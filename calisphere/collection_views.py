@@ -285,12 +285,12 @@ class Collection(object):
             "result_fields": [
                 "reference_image_md5",
                 "url_item",
-                "calisphere-id",
+                "id",
                 "title",
                 CollectionFF.filter_field,
                 "type"
             ],
-            "sort": ("title.keyword", "asc"),
+            "sort": ("sort_title.keyword", "asc"),
             "rows": 6
         }
         display_items = search_index(search_terms)
@@ -322,13 +322,12 @@ class Collection(object):
                 "collection_data",
                 "reference_image_md5",
                 "url_item",
-                "calisphere-id",
+                "id",
                 "title",
                 "type"
             ],
-            'sort': ("title.keyword", "asc"),
-            "rows": 3,
-            "start": 0
+            "sort": ("title.keyword", "asc"),
+            "rows": 3
         }
         collection_items = search_index(rc_params)
         collection_items = collection_items.results

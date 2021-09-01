@@ -57,7 +57,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             "result_fields": [
                 "reference_image_md5",
                 "url_item",
-                "calisphere-id",
+                "id",
                 "title",
                 "collection_ids",
                 "type"
@@ -79,7 +79,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             "_source": [
                 "reference_image_md5", 
                 "url_item", 
-                "calisphere-id", 
+                "id",
                 "title", 
                 "collection_ids", 
                 "type"
@@ -107,7 +107,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             'result_fields': [
                 "reference_image_md5",
                 "url_item",
-                "calisphere-id",
+                "id",
                 "title",
                 "collection_data",
                 "type"
@@ -121,7 +121,7 @@ class CollectionQueriesTestCase(unittest.TestCase):
             "_source": [
                 "reference_image_md5", 
                 "url_item", 
-                "calisphere-id", 
+                "id",
                 "title", 
                 "collection_data", 
                 "type"
