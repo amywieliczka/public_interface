@@ -9,13 +9,14 @@ from collections import namedtuple
 import string
 import random
 from .cache_retry import json_loads_url, ES_search
+from .temp import search_index
 from django.core.cache import cache
 from django.conf import settings
 import time
 import re
 from .temp import query_encode
 
-CollectionLink = namedtuple('CollectionLink', 'url, id, label')
+CollectionLink = namedtuple('CollectionLink', 'url, label, id')
 
 col_regex = (r'https://registry\.cdlib\.org/api/v1/collection/'
              r'(?P<id>\d*)/?')
@@ -45,7 +46,7 @@ class CollectionManager(object):
             }
 
             save = {}
-            index_data = ES_search(query_encode(**collections_query))
+            index_data = search_index(collections_query)
             save['data'] = self.data = list(index_data.facet_counts[
                 'facet_fields']['collection_data'].keys())
             self.parse()
@@ -65,7 +66,7 @@ class CollectionManager(object):
 
         parsed = []
         for x in self.data:
-            cd = x.rsplit('::')
+            cd = x.rsplit('::')[::-1]
             cd.insert(0, col_template.format(cd[0]))
             parsed.append(CollectionLink(*cd))
         self.parsed = sorted(parsed, key=sort_key)
