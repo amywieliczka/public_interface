@@ -12,7 +12,7 @@ from exhibits.models import *
 
 from calisphere.collection_data import CollectionManager
 
-from .cache_retry import SOLR_select_nocache
+from .cache_retry import ES_search_nocache
 
 app = apps.get_app_config('calisphere')
 
@@ -53,12 +53,9 @@ class CollectionSitemap(HttpsSitemap):
         return CollectionManager().parsed
 
     def location(self, item):
-        col_id = re.match(
-            r'^https://registry.cdlib.org/api/v1/collection/(?P<collection_id>\d+)/$',
-            item.url)
         return reverse(
             'calisphere:collectionView',
-            kwargs={'collection_id': col_id.group('collection_id')})
+            kwargs={'collection_id': item.id})
 
 
 class ItemSitemap(object):
@@ -74,19 +71,25 @@ class ItemSitemap(object):
 
     def __init__(self, collection_url):
         self.limit = 15000  # 50,000 is google limit on urls per sitemap file
-        self.collection_filter = 'collection_url: "' + collection_url + '"'
-        self.solr_total = SOLR_select_nocache(q='', fq=[self.collection_filter]).numFound
+        self.collection_filter = {'collection_urls.keyword': [collection_url]}
+        self.solr_total = ES_search_nocache(
+            query={"terms": self.collection_filter},
+            size=0
+        ).numFound
         self.num_pages = math.ceil(self.solr_total / self.limit)
 
     def items(self):
         ''' returns a generator containing data for all items in solr '''
         # https://github.com/ucldc/extent_stats/blob/master/calisphere_arks.py
         base_query = {
-            'q': '',
-            'fl': 'id,reference_image_md5,timestamp',  # fl = field list
-            'fq': [self.collection_filter],
-            'rows': 1000,
-            'sort': 'score desc,id desc',
+            "query": {
+                "terms": self.collection_filter
+            },
+            "_source": ["id", "reference_image_md5", "timestamp"],
+            "size": 1000,
+            "sort": [
+                {"id.keyword": "desc"}
+            ]
         }
 
         data_iter = self.get_iter(base_query)
@@ -97,7 +100,7 @@ class ItemSitemap(object):
         return reverse('calisphere:itemView', kwargs={'item_id': item})
 
     def get_iter(self, params):
-        nextCursorMark = '*'
+        nextCursorMark = None
         while True:
             solr_page = self.get_solr_page(params, nextCursorMark)
 
@@ -110,12 +113,13 @@ class ItemSitemap(object):
                     'timestamp': item.get('timestamp')
                 }
 
-            nextCursorMark = solr_page.nextCursorMark
+            nextCursorMark = solr_page.results[-1].get('sort')
 
-    def get_solr_page(self, params, cursor='*', sleepiness=1):
-        params.update({'cursorMark': cursor})
+    def get_solr_page(self, params, cursor=None, sleepiness=1):
+        if cursor:
+            params.update({'search_after': cursor})
         t1 = time.time()
-        solr_search = SOLR_select_nocache(**params)
+        solr_search = ES_search_nocache(**params)
         nap = (time.time() - t1) * sleepiness
         time.sleep(nap)
         return solr_search

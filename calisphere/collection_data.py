@@ -65,7 +65,7 @@ class CollectionManager(object):
         parsed = []
         for x in self.data:
             cd = x.rsplit('::')[::-1]
-            cd.insert(0, col_template.format(cd[0]))
+            cd.insert(0, col_template.format(cd[1]))
             parsed.append(CollectionLink(*cd))
         self.parsed = sorted(parsed, key=sort_key)
 

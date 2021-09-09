@@ -26,6 +26,7 @@ if hasattr(settings, 'XRAY_RECORDER'):
 
 # put this here for now
 from elasticsearch import Elasticsearch
+
 elastic_client = Elasticsearch(
     hosts=[settings.ES_HOST],
     http_auth=(settings.ES_USER, settings.ES_PASS))
@@ -50,9 +51,6 @@ def ES_search(body):
     else:
         facet_counts = {}
 
-    for item in results['hits']['hits']:
-        item['id'] = item['_id']
-
     for result in results['hits']['hits']:
         metadata = result.pop('_source')
         metadata['title'] = [metadata.get('title')]
@@ -66,6 +64,10 @@ def ES_search(body):
         facet_counts)
 
     return results
+
+
+def ES_search_nocache(**kwargs):
+    return ES_search(kwargs)
 
 
 def ES_get(item_id):
@@ -92,35 +94,6 @@ SOLR_DEFAULTS = {
     'qs': 12,
     'ps': 12,
 }
-"""
-    qf:
-        fields and the "boosts" `fieldOne^2.3 fieldTwo fieldThree^0.4`
-    mm: (Minimum 'Should' Match)
-    qs:
-        Query Phrase Slop (in qf fields; affects matching).
-
-    pf: Phrase Fields
-	"pf" with the syntax
-        field~slop.
-        field~slop^boost.
-    ps:
-	Default amount of slop on phrase queries built with "pf",
-	"pf2" and/or "pf3" fields (affects boosting).
-    pf2: (Phrase bigram fields)
-    ps2: (Phrase bigram slop)
-	<!> Solr4.0 As with 'ps' but for 'pf2'. If not specified,
-	'ps' will be used.
-    pf3 (Phrase trigram fields)
-	As with 'pf' but chops the input into tri-grams, e.g. "the
-	brown fox jumped" is queried as "the brown fox" "brown fox
-	jumped"
-    ps3 (Phrase trigram slop)
-    tie (Tie breaker)
-	Float value to use as tiebreaker in DisjunctionMaxQueries
-	(should be something much less than 1)
-        Typically a low value (ie: 0.1) is useful.
-
-"""
 
 SolrResults = namedtuple(
     'SolrResults', 'results header numFound facet_counts nextCursorMark')
