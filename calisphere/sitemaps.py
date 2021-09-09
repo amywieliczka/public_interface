@@ -12,7 +12,7 @@ from exhibits.models import *
 
 from calisphere.collection_data import CollectionManager
 
-from .cache_retry import ES_search_nocache
+from .cache_retry import es_search_nocache
 
 app = apps.get_app_config('calisphere')
 
@@ -72,7 +72,7 @@ class ItemSitemap(object):
     def __init__(self, collection_url):
         self.limit = 15000  # 50,000 is google limit on urls per sitemap file
         self.collection_filter = {'collection_urls.keyword': [collection_url]}
-        self.solr_total = ES_search_nocache(
+        self.solr_total = es_search_nocache(
             query={"terms": self.collection_filter},
             size=0
         ).numFound
@@ -119,7 +119,7 @@ class ItemSitemap(object):
         if cursor:
             params.update({'search_after': cursor})
         t1 = time.time()
-        solr_search = ES_search_nocache(**params)
+        solr_search = es_search_nocache(**params)
         nap = (time.time() - t1) * sleepiness
         time.sleep(nap)
         return solr_search

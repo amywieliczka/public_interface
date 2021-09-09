@@ -2,30 +2,26 @@
 """
 
 from future import standard_library
-standard_library.install_aliases()
-from builtins import object
 from django.core.cache import cache
 from django.conf import settings
 
 from collections import namedtuple
-import urllib.request, urllib.error, urllib.parse
+import urllib.request
+import urllib.error
 from retrying import retry
 import requests
 import pickle
 import hashlib
 import json
-import itertools
 from typing import Dict, List, Tuple
+from aws_xray_sdk.core import patch
+from elasticsearch import Elasticsearch
 
 requests.packages.urllib3.disable_warnings()
-
-from aws_xray_sdk.core import patch
+standard_library.install_aliases()
 
 if hasattr(settings, 'XRAY_RECORDER'):
     patch(('requests', ))
-
-# put this here for now
-from elasticsearch import Elasticsearch
 
 elastic_client = Elasticsearch(
     hosts=[settings.ES_HOST],
@@ -37,7 +33,7 @@ ESItem = namedtuple(
     'ESItem', 'found, item, resp')
 
 
-def ES_search(body):
+def es_search(body):
     results = elastic_client.search(
         index="calisphere-items", body=body)
 
@@ -66,11 +62,11 @@ def ES_search(body):
     return results
 
 
-def ES_search_nocache(**kwargs):
-    return ES_search(kwargs)
+def es_search_nocache(**kwargs):
+    return es_search(kwargs)
 
 
-def ES_get(item_id):
+def es_get(item_id):
     item_search = elastic_client.get(
         index="calisphere-items", id=item_id)
     found = item_search['found']
@@ -85,18 +81,6 @@ def ES_get(item_id):
 
     results = ESItem(found, item, item_search)
     return results
-
-
-SOLR_DEFAULTS = {
-    'mm': '100%',
-    'pf3': 'title',
-    'pf': 'text,title',
-    'qs': 12,
-    'ps': 12,
-}
-
-SolrResults = namedtuple(
-    'SolrResults', 'results header numFound facet_counts nextCursorMark')
 
 
 # create a hash for a cache key
@@ -120,8 +104,8 @@ def json_loads_url(url_or_req):
     return data
 
 
-def ES_mlt(item_id):
-    first_item = ES_get(item_id)
+def es_mlt(item_id):
+    first_item = es_get(item_id)
     es_query = {
         "query": {
             "more_like_this": {
@@ -139,32 +123,9 @@ def ES_mlt(item_id):
         "_source": ["id", "type", "reference_image_md5", "title"],
         "size": 24
     }
-    mlt_results = ES_search(es_query)
+    mlt_results = es_search(es_query)
     mlt_results.results.insert(0, first_item.item)
     return mlt_results
-
-
-@retry(stop_max_delay=3000)
-def SOLR_raw(**kwargs):
-    kwargs.update(SOLR_DEFAULTS)
-    # look in the cache
-    key = 'SOLR_raw_{0}'.format(kwargs_md5(**kwargs))
-    sr = cache.get(key)
-    if not sr:
-        # do the solr look up
-        solr_url = '{}/query/'.format(settings.SOLR_URL)
-        solr_auth = {'X-Authentication-Token': settings.SOLR_API_KEY}
-        # Clean up optional parameters to match SOLR spec
-        query = {}
-        for key, value in list(kwargs.items()):
-            key = key.replace('_', '.')
-            query.update({key: value})
-        res = requests.get(
-            solr_url, headers=solr_auth, params=query, verify=False)
-        res.raise_for_status()
-        sr = res.content
-        cache.set(key, sr, settings.DJANGO_CACHE_TIMEOUT)  # seconds
-    return sr
 
 
 FieldName = str
@@ -263,4 +224,4 @@ def query_encode(query_string: str = None,
 
 
 def search_index(query):
-    return ES_search(query_encode(**query))
+    return es_search(query_encode(**query))

@@ -4,7 +4,7 @@ from django.conf import settings
 from django.urls import reverse
 from django.http import Http404, HttpResponse
 from . import constants
-from .cache_retry import ES_mlt, json_loads_url, ES_get, search_index
+from .cache_retry import es_mlt, json_loads_url, es_get, search_index
 from .search_form import (SearchForm, solr_escape, CollectionFacetValueForm,
                           CarouselForm, CollectionCarouselForm, 
                           CampusCarouselForm, CampusForm)
@@ -105,7 +105,7 @@ def item_view(request, item_id=''):
     from_item_page = request.META.get("HTTP_X_FROM_ITEM_PAGE")
 
     item_id_search_term = 'id:"{0}"'.format(item_id)
-    item_search = ES_get(item_id)
+    item_search = es_get(item_id)
     order = request.GET.get('order')
 
     if not item_search.found:
@@ -302,7 +302,7 @@ def search(request):
 
 
 def item_view_carousel_mlt(item_id):
-    carousel_solr_search = ES_mlt(item_id)
+    carousel_solr_search = es_mlt(item_id)
     if carousel_solr_search.numFound == 0:
         return None, None
         # raise Http404('No object with id "' + item_id + '" found.')
