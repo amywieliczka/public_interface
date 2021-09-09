@@ -99,33 +99,6 @@ SolrResults = namedtuple(
     'SolrResults', 'results header numFound facet_counts nextCursorMark')
 
 
-def SOLR(**params):
-    # replacement for edsu's solrpy based stuff
-    solr_url = '{}/query/'.format(settings.SOLR_URL)
-    solr_auth = {'X-Authentication-Token': settings.SOLR_API_KEY}
-    # Clean up optional parameters to match SOLR spec
-    query = {}
-    for key, value in list(params.items()):
-        key = key.replace('_', '.')
-        query.update({key: value})
-    res = requests.post(solr_url, headers=solr_auth, data=query, verify=False)
-    res.raise_for_status()
-    results = json.loads(res.content.decode('utf-8'))
-    facet_counts = results.get('facet_counts', {})
-    for key, value in list(facet_counts.get('facet_fields', {}).items()):
-        # Make facet fields match edsu with grouper recipe
-        facet_counts['facet_fields'][key] = dict(
-            itertools.zip_longest(*[iter(value)] * 2, fillvalue=""))
-
-    return SolrResults(
-        results['response']['docs'],
-        results['responseHeader'],
-        results['response']['numFound'],
-        facet_counts,
-        results.get('nextCursorMark'),
-    )
-
-
 # create a hash for a cache key
 def kwargs_md5(**kwargs):
     m = hashlib.md5()
@@ -147,29 +120,28 @@ def json_loads_url(url_or_req):
     return data
 
 
-# dummy class for holding cached data
-class SolrCache(object):
-    pass
-
-
-# wrapper function for solr queries
-@retry(stop_max_delay=3000)  # milliseconds
-def SOLR_select(**kwargs):
-    kwargs.update(SOLR_DEFAULTS)
-    # look in the cache
-    key = 'SOLR_select_{0}'.format(kwargs_md5(**kwargs))
-    sc = cache.get(key)
-    if not sc:
-        # do the solr look up
-        sr = SOLR(**kwargs)
-        # copy attributes that can be pickled to new object
-        sc = SolrCache()
-        sc.results = sr.results
-        sc.header = sr.header
-        sc.facet_counts = getattr(sr, 'facet_counts', None)
-        sc.numFound = sr.numFound
-        cache.set(key, sc, settings.DJANGO_CACHE_TIMEOUT)  # seconds
-    return sc
+def ES_mlt(item_id):
+    first_item = ES_get(item_id)
+    es_query = {
+        "query": {
+            "more_like_this": {
+                "fields": [
+                    "title.keyword",
+                    "collection_data",
+                    "subject.keyword"
+                ],
+                "like": [
+                    {"_id": item_id}
+                ],
+                "min_term_freq": 1
+            }
+        },
+        "_source": ["id", "type", "reference_image_md5", "title"],
+        "size": 24
+    }
+    mlt_results = ES_search(es_query)
+    mlt_results.results.insert(0, first_item.item)
+    return mlt_results
 
 
 @retry(stop_max_delay=3000)
@@ -192,13 +164,6 @@ def SOLR_raw(**kwargs):
         res.raise_for_status()
         sr = res.content
         cache.set(key, sr, settings.DJANGO_CACHE_TIMEOUT)  # seconds
-    return sr
-
-
-@retry(stop_max_delay=3000)
-def SOLR_select_nocache(**kwargs):
-    kwargs.update(SOLR_DEFAULTS)
-    sr = SOLR(**kwargs)
     return sr
 
 
