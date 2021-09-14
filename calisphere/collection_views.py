@@ -325,8 +325,7 @@ class Collection(object):
                 "title",
                 "type"
             ],
-            "sort": ("title.keyword", "asc"),
-            "rows": 3
+            "rows": 3,
         }
         collection_items = search_index(rc_params)
         collection_items = collection_items.results
