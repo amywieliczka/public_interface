@@ -10,7 +10,7 @@ markdown==2.6.8
 https://github.com/ucldc/md5s3stash/archive/python3.zip#egg=md5s3stash
 #https://github.com/amywieliczka/md5s3stash/archive/python3.zip#egg=md5s3stash
 django-redis==4.7.0
-redis==2.10.5
+redis==4.5.3
 hiredis==0.2.0
 django-static-sitemaps==4.2.1
 django-health-check==3.9.0
