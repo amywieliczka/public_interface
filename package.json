@@ -59,6 +59,6 @@
     "openseadragon": "^2.1.0",
     "picturefill": "~2.3.1",
     "slick-carousel": "=1.8.1",
-    "underscore": "~1.7.0"
+    "underscore": "~1.12.1"
   }
 }
